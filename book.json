@@ -1,0 +1,25 @@
+{
+    "structure":{
+        "readme":"README.md"
+    },
+	"title":"MyDoc",
+	"links": {
+	        "home": "https://github.com/unixc3t/mydoc",
+	        "about": "http://www.cnblogs.com/or2-",
+	        "issues": null,
+	        "contribute": null
+	    },
+
+		"pdf": {
+		        "toc": true,
+		        "pageNumbers": false,
+		        "fontSize": 12,
+		        "paperSize": "a4",
+		        "margin": {
+		            "right": 62,
+		            "left": 62,
+		            "top": 36,
+		            "bottom": 36
+		        }
+		    }
+}
