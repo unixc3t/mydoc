@@ -61,3 +61,48 @@
 
     char birds[11] = "Mr. Cheeps";
 	char fish[] = "Bubbles";
+
+> 字符串 
+> 使用字符串的程序必须 #include <string>并且 使用 std::string来引用它
+>  可以使用c-风格字符串来初始化string对象
+
+    string str1; //创建一个空字符串对象
+    string str2 = "panther"; //创建一个初始化的字符串
+
+> c++11 字符串初始化
+> c++11允许将列表初始化用于c-风格字符串和string对象
+
+	char first_date[] = {"Le Chapon Dou"}
+	char second_date[] = {"The Elegant Plate"}
+	string third_date ={"The Bread Bow"}
+	string fourth_date {"Hank's Fine Eats"}
+	
+> 不能将一个数组赋给另一个数组,可以将一个字符串赋给另一字符串
+> 使用L,u,U来创建 char16_t,char32_t 字符串
+
+	wchar_t title[]= L"Chief Astrongator"; //w_char string
+	char16_t title2[]= u"Chief Astrongator"; //char16 string
+	char32_t title3[]= U"Chief Astrongator"; //char32 string
+
+> c++11还支持Unicode字符编码方案UTF-8,使用u8前传表示这种类型字符串
+> c++11还新增另一种类型字符串,叫做原始(raw)字符串,字符表示自己,例如\n不表示换行,而表示两个常规字符--斜杠和n.
+> 原始字符使用"(和)"来界定字符,并使用前缀R来标识字符串.
+
+	cout<< R"(Jim "King" Tutt use "\n" instead of endl.)" << '\n'
+
+> 上述代码将显示
+
+	Jim "King" Tutt uses \n instead of endl
+	
+> 如果想在原始字符串中添加"(和)"时,就用 R"+*(和)+*"代替"(和)"
+
+	cout<< R"+*( "(who wouldn't?)", she whispered. )+*" <<endl;
+
+> 将显示如下
+
+	"(Who wouldn't?)", she whispered.
+
+> 自定义界定符,如上面的"+*( 就是一个自定义界定符的开始部分,
+> 可以再默认界定符之间添加任意数量基本字符(+*就是添加的任意基本字符),但空格,左括号,右括号,斜杠和控制字符(如制表符和换行符号)除外
+> 可以将R与 u,U配合使用 例如Ru,RU标识 宽字符
+	
