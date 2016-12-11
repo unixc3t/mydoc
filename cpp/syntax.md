@@ -106,3 +106,41 @@
 > 可以再默认界定符之间添加任意数量基本字符(+*就是添加的任意基本字符),但空格,左括号,右括号,斜杠和控制字符(如制表符和换行符号)除外
 > 可以将R与 u,U配合使用 例如Ru,RU标识 宽字符
 	
+>指针和数字
+
+	int * pt;
+	pt = 0xB8000000; //type mismatch
+
+>使用强制转换
+
+	int * pt;
+	pt = (int *) 0xB800000; // type now match
+
+>使用 new来分配内存
+
+	int * p = new int;
+>为一个数据对象获得并制定分配内存的通用格式如下
+>typeName * pointer_name = new typeName
+
+>使用delete释放内存
+
+	int * ps= new int;
+	delete ps; 
+>这将释放内存,但不会删除ps指针本身,可以将ps重新指向内存块,delete和new要成对是哟ing,不可重复释放内存
+>只能用delete来a是否能够new分配的内存,空指针使用delete是安全的,一般来说不要使用两个指针指向同一块内存,这将增加错误的删除一个内存块2次
+
+>使用new创建动态数组 
+>只要将数组的元素类型和数目告诉new就可以,必须再类型名后面加上方括号,其中包含元素数目
+
+	int * psome = new int [10];
+
+>new运算符返回第一个元素地址,被赋给指针psome ,使用delete [] psome来释放内存,方括号表示释放整个数组
+>使用new 时使用方括号.使用delete时也要使用方括号
+>总是new和delete使用要遵循一下原则
+>不要使用delete释放不是new分配的内存
+>不要使用delete释放一个内存两次
+>使用new []为数组分配内存给,应该使用delete []来释放内存
+>如果使用new []为一个实体分配内存,则应该使用delete(没有方括号)来释放
+>对空指针使用delete是安全的
+
+
