@@ -42,3 +42,48 @@
 	assert myProp == 'myValue'
 	println project.someOtherProp
 	ext.someOtherProp = 567
+
+##### GRADLE PROPERTIES
+
+>在<USER_HOME>/.gradle目录下的gradle.properties文件中声明的变量可以直接在你的项目中使用,这些变量可以通过
+>project实例访问这些属性,只能有一个gradle.properties文件,在<USER_HOME>/.gradle目录下,即使你有多个项目要处理
+>看下面示例,我们假设下面的属性在properties中定义了
+
+	exampleProp = myValue
+	someOtherProp = 455
+	
+>你可以在项目中按照如下方式访问
+
+	assert project.exampleProp == 'myValue'
+	task printGradleProperty << {
+		println "Second property: $someOtherProp"
+	}
+	
+
+#### OTHER WAYS TO DECLARE PROPERTIES
+
+>extra properties和gradle properties是你主要用来声明属性和值,gradle允许你许多其他方式提供属性用来构建
+
+> Project property via the –P command-line option
+> System property via the –D command-line option
+> Environment property following the pattern
+> ORG_GRADLE_PROJECT_propertyName=someValue
+
+#### Working with tasks
+
+>新定义的任务是org.gradle.api.DefaultTask类型.实现了org.gradle.api.Task接口,DefaultTask的所有属性都是私有
+>只能使用public的setter和getter方法来访问,幸好groovy的语法糖可以使用属性名称访问
+
+
+#### Managing the project version
+
+![](properties.png)
+
+>如上图所示,project的版本在构建期间从一个属性文件中读取,这个ProjectVersion数据类被初始化,版本的每一个分类被
+>传递给数据类的属性,ProjectVersion类实例被分配给Project的version属性
+
+>能够编程的方式控制版本结构,对于更多的自动化你的项目构建很重要.例如一个例子,你已经通过所有功能测试,准备发送代码,当前版本
+>是1.2-SNAPSHOT. 在构建最终的war文件之前,你想变成release version 1.2,并且自动部署到生产服务器. 
+>这个过程中可以通过创建一个任务:修改项目版本号和部署war文件
+
+#### Declaring task actions
