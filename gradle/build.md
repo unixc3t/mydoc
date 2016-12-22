@@ -87,3 +87,95 @@
 >这个过程中可以通过创建一个任务:修改项目版本号和部署war文件
 
 #### Declaring task actions
+
+> task里的action就是存放构建逻辑最适合的地方， Task接口提供2个合适的方法来定义一个task的action，doFirst(闭包)
+>和doLast(闭包),当一个task执行的时候，定义的action逻辑作为一个闭包,像参数那样被轮流执行
+>可以定义一个简单的task叫做printVersion。这个task的目的打印当前project版本。 定义逻辑作为task的最后action，代码
+>如下
+
+	version = '0.1-SNAPSHOT'
+	task printVersion {
+		doLast {
+			println "Version: $version"
+		}
+	}
+	
+>通过使用doFirst可以达成同样目的
+
+	task printVersion {
+		doFirst {
+			println "Version: $version"
+		}
+	}
+	
+#### ADDING ACTIONS TO EXISTING TASKS
+	
+>前面，你仅仅是加入一个单独的action到task里面，要么是frist要么是last，但是你不会被限制于每个task只有一个action，
+>你可以加入许多actions到已经建立的task里面，每个task都有一组actions，运行时，按顺序执行，看下面的版本
+
+	task printVersion {
+		doFirst {
+			println "Before reading the project version"
+		}
+		doLast {
+			println "Version: $version"
+		}
+		}
+	printVersion.doFirst { println "First action" }
+	printVersion << { println "Last action" } // <<符号doLast别名
+
+> 上面的例子所示，你可以添加actions到task里，这十分有用。例如你想执行一个自定义逻辑
+>但是这个task里没有你自定义的action,例如你想添加一个doFirst action到编译java的插件task里，来检查至少有一个java
+>源文件存在
+
+
+#### Accessing DefaultTask properties
+
+>下一步我们改进输出本版号方式，gradle提供了logger的实现基于SLF4J,除了常用的日志级别(DEBUG,ERROR,TRACE,INFO,WARN)之外，还加入了一些扩展级别， logger实例可以直接通过task的一个方法访问，下面是打印版本号使用log level QUIET:
+
+	task printVersion << {
+		logger.quiet "Version: $version"
+	}
+	
+> 还有2个属性，group和description.，都可以作为task的文档，
+> description属性表示一个task的目的的简短描述,group定义task的逻辑分组，设置这两个属性作为task的参数
+
+	task printVersion(group: 'versioning',description: 'Prints project version.') << {
+		logger.quiet "Version: $version"
+	}
+
+>也可以调用set方法设置
+	
+	task printVersion {
+		group = 'versioning'
+		description = 'Prints project version.'
+		doLast {
+			logger.quiet "Version: $version"
+		}
+	}
+	
+
+#### Defining task dependencies
+
+> dependsOn允许你声明基于一个或多个任务的依赖
+
+	task first << { println "first" }
+	task second << { println "second" }
+	task printVersion(dependsOn: [second, first]) << {
+		logger.quiet "Version: $version"
+	}
+
+    task third << { println "third" }
+	third.dependsOn('printVersion')
+	
+
+#### Finalizer tasks
+
+>实践过程中，你或许发现需要一个可靠的方案去清理一个任务，在它执行完之后，典型的场景就是web容器需要部署程序之前
+>运行集成测试， gradle给这种场景一个finalizer task，即使这个finalizer task运行失败，gradle也会定时调用，下面就是一个例子
+
+	task first << { println "first" }
+	task second << { println "second" }
+	first.finalizedBy second
+
+> 你会发现first执行完，自动触发second任务
