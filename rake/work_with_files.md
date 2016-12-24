@@ -150,7 +150,56 @@
 		BlogGenerator.new(t).perform
 	end
 
+> 现在看新代码，第一个变化就是 FileUtils.rm(blog.html, force: true),每次rake执行的时候，移除blog.html文件， 这个:force选项，告诉rm方法如果文件不存在
+>不要抛出异常，我们可能会遇到这种情况，第一次运行或者我们自己删除了blog.html文件，第二个改变就是在定义blog.html任务时得到的t参数，t参数用来得到
+>用来生成文件的任务名，和使用prerequisites方法得到依赖任务，它返回一组依赖任务名字的字符串
+
+>深入 blog.html文件task的代码，它不需要任何额外的信息，这样允许我们简单的移动代码到一个单独的文件里，我们下一步重构，创建一个BlogGenerator类，
+>他的初始化方法
+
+>下面是 blog_generator.rb的代码
+
+	class BlogGenerator
+		def initialize(task)
+			@task = task
+		end
+		
+		article_links = @task.prerequisites.map do |article|
+			                     <<-EOS
+									 <a href='#{article}'>
+										 Article #{article.match(/\d+/)}
+									 </a>
+								 EOS
+							 end
+							 
+	    html = <<-EOS
+	                    <!DOCTYPE html>
+						<html>
+						<head>
+							<title>Rake essential</title>
+						</head>
+						<body>
+							#{article_links.join('<br />')}
+						</body>
+						</html>
+						EOS
+	 File.write(@task.name, html)
+    end
+
+>下面是 Rakefile文件代码
+	
+	require_relative 'blog_generator'
+	articles = ['article1', 'article2']
+	task :default => 'blog.html'
+		articles.each do |article|
+			file "#{article}.html" => "#{article}.md" do
+				sh "pandoc -s #{article}.md -o #{article}.html"
+			end
+		end
+	FileUtils.rm('blog.html', force: true)
+	file 'blog.html' => articles.map { |a| "#{a}.html" } do |t|
+		BlogGenerator.new(t).perform
+	end
 
 
-
-
+>后面我们会学习rules，将我们的代码修改的更灵活
