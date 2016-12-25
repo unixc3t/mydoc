@@ -203,3 +203,128 @@
 
 
 >后面我们会学习rules，将我们的代码修改的更灵活
+
+#### Creating a folder with the directory method
+
+>有时你需要创建嵌套目录，你可以使用file task创建文件和目录，
+>如果你需要创建目录树，你可以使用file task和依赖任务完成， 
+> 下面就是一个例子
+
+	file 'my_gem' do |t| mkdir t.name end
+	file 'my_gem/tests" => ['my_gem'] do |t| mkdir t.name end
+	file 'my_gem/tests/fixtures" => ['my_gem/tests/fixtures'] do |t|
+		mkdir t.name
+	end
+
+>另一种方式是使用FileUtils#mkdir_p 方法，可以在task的action中和Rakefile上下面文里面使用
+>但是这不是Rake的方式，这有一个专有方式定义folder task 使用directory方法，下面例子：
+
+	directory 'my_gem/tests/fixtures'
+
+>这个方法像FileUtils#mkdir_p的同义词，但是它定义的rake task可以被其他任务作为依赖
+
+	directory 'my_gem/tests/fixtures'
+	file 'README.md' => 'my_gem/tests/fixtures' do
+		sh 'echo test > my_gem/tests/fixtures README.md'
+	end
+
+>当你执行README.md 任务的时候，为这个文件创建需要的目录 my_gem/tests/fixtures
+
+>这个directory方法不允许接收任何参数，除了要创建的目录名，然而，如果你需要添加依赖任务或者
+>actions给这个directory task， 你可以使用file方法 例子如下
+
+	directory 'my_gem'
+	file 'my_gem' => ['otherdata']
+	file 'my_gem' do
+		cp Dir['gem_template/**/*'], 'my_gem'
+	end
+
+#### Using Rake's file utilities
+
+> Rake提供了很多有用的方法，帮助你处理rake files相关任务，如下
+	
+*	 The FileList module
+*	 The FileUtils module
+*	 The pathmap method
+
+##### Using the FileList module functionality to collect the files
+
+>这是在我们Rakefile文件里仅有的事情，需要摆脱掉，需要手动改变文章列表，幸运的是，rake提供了工具
+>帮助我们解决这个问题， Rake::FileList ，它提供了灵活的方式来调整需要生成的文件列表， 选择性的
+>过滤你需要的文件， 可以过滤临时文件，那些需要动态删除， 看下面实例
+
+	require_relative 'blog_generator'
+	
+	articles = Rake::FileList.new('**/*.md', '**/*.markdown') do |files|
+	                   files.exclude('~*')
+					   files.exclude(/^temp.+\//)
+					   files.exclude do |file|
+						   File.zero?(file)
+					   end
+				   end
+
+	task :default => 'blog.html'
+	articles.ext.each do |article|
+		file "#{article}.html" => "#{article}.md" do
+			sh "pandoc -s #{article}.md -o #{article}.html"
+		end
+		file "#{article}.html" => "#{article}.markdown" do
+			sh "pandoc -s #{article}.markdown -o #{article}.html"
+		end
+	end
+	FileUtils.rm('blog.html', force: true)
+	file 'blog.html' => articles.ext('.html') do |t|
+		BlogGenerator.new(t).perform
+	end
+
+>我们看一下定义的文章列表，通过Rake::FileList创建，他初始化接收文件标记列表，我们得到素有
+>.md和.markdown扩展名的文件，通过~*模式过滤一些文件(emacs临时文件),同时忽略了以temp开头文件
+> 最后忽略了大小为0的文件，注意这个有用的方法.ext 用来构造文件名列表，如下
+
+	$ irb -r rake --prompt=simple
+	>> articles = Rake::FileList.new('**/*.md', '**/*.markdown')
+	=> ["article1.md", "article2.md", "article3.md"]
+	>> articles.ext
+	=> ["article1", "article2", "article3"]
+	>> articles.ext('.html')
+	=> ["article1.html", "article2.html", "article3.html"]
+
+
+>传递 -r rake 会自动引入需要的rake库给ruby的shell，使用 --prompt=simple 表示简化输出信息
+
+
+##### Using pathmap to transform file lists
+
+> 使用文件和目录列表工作时，我们经常不得不转换一组文件从一个类型到另一个类型，我们已经看到
+> .ext方法的使用，在一些情况，这远远不够，Rake提供了更有意思的方法pathmap,
+> 他可以被FileList对象上调用， 因为Rake扩展了String类， 允许接收2个参数，需要的说明和可选的
+>代码块， #pathmap方法收集文件通过给定的说明，这个说明控制详细的映射细节，下面是合法的模式
+
+* %p 完整文件名和目录
+* %f 文件名包括扩展名，没有目录
+* %n 只有文件名，没有扩展名
+* %d 只收集目录
+* %x 收集扩展名，如果是空字符表示没有扩展
+* %X 除了扩展名，剩余其他都收集
+* %s 收集分隔符
+* %% 百分号标志
+
+>下面演示了如何使用 #pathmap方法，示例文件列表如下
+> file1.txt ,file2.pdf , sources/file3.txt , and bin/file4
+
+	require 'rake'
+	list = FileList['file1.txt', 'file2.pdf', 'sources/file3.txt', 'bin/file4']
+	list.pathmap('%p')
+	list.pathmap('%f')
+	list.pathmap('%n')
+	list.pathmap('%d')
+	list.pathmap('%x')
+	list.pathmap('%X')
+	list.pathmap('%s')
+	list.pathmap('%%')
+
+> FileList对象不仅仅是用.new创建，也可以使用 .[]方法
+
+	![](p1.png)
+	![](p2.png)
+	
