@@ -179,3 +179,94 @@
 	first.finalizedBy second
 
 > 你会发现first执行完，自动触发second任务
+
+#### Adding arbitrary code
+
+>现在回到我们说的gradle有能力定义各种groovy代码在build script里面,在实践中，你能够编写类和方法和你编写groovy脚本里一样，
+> 这节，你创建一个版本类，在java中 ，按照bean规范约定的类叫做Pojo，默认通过getter和setter方法访问属性，但是手动编写这些
+>方法很麻烦， groovy里的pogo等价于java的pojo,但是仅仅需要声明属性，不需要声明访问方法， getter和setter方法会在运行时添加进去
+> 如下代码
+
+	version = new ProjectVersion(0, 1)
+	
+	class ProjectVersion {
+		Integer major
+		Integer minor
+		Boolean release
+
+	    ProjectVersion(Integer major, Integer minor) {
+			this.major = major
+			this.minor = minor
+			this.release = Boolean.FALSE
+		}
+
+	   ProjectVersion(Integer major, Integer minor, Boolean release) {
+		   this(major, minor)
+		   this.release = release
+       }
+
+	   @Override
+       String toString() {
+          "$major.$minor${release ? '' : '-SNAPSHOT'}"
+      }
+     }
+
+	task printVersion  {
+		doLast {
+			logger.quiet "Version: $version"
+		}
+    }
+
+> 当运行上面代码，你会看到task printVersion 输出前面一样的结果，不幸的是，你仍然不得不手动修改构建版本号
+
+#### Understanding task configuration
+
+>在你编写代码之前，你需要创建一个properties文件叫做versin.properties在build scipt旁边，对于每种版本号，提供初始值
+>按照 key-value键值对形式 如下
+	
+	major = 0
+	minor = 1
+	release = false
+
+##### ADDING A TASK CONFIGURATION BLOCK
+
+> 下面代码 声明一个task叫做loadVersion ，用来读取类版本号，从properties文件里并且分配一个新的ProjectVersion实例给project
+> version 属性， 表面看，这个task和前面定义的差不多，但是你仔细看，你会发现你没有定义一个action或者左 shif操作符 
+> gradle调用了一个 task configuration
+
+    ext.versionFile = file('version.properties')
+
+	task loadVersion {
+		project.version = readVersion()
+	}
+
+	ProjectVersion readVersion() {
+		logger.quiet 'Reading the version file.'
+
+	    if (!versionFile.exists()) {
+			throw new GradleException("Required version file does not exist: $versionFile.canonicalPath") }
+
+	    Properties versionProps = new Properties()
+
+	    versionFile.withInputStream { stream ->
+                versionProps.load(stream)
+	    }
+
+     new ProjectVersion(versionProps.major.toInteger(), versionProps.minor.toInteger(), versionProps.release.toBoolean())
+    }
+
+
+> 运行代码你会看到loadVersion先被执行，但是任务名没有打印出来， task 配置总是在 task action前执行，关键是理解
+> 整个 gradle构建生命周期， 如下图
+
+![](b2.png)
+
+###### GRADLE ’ S BUILD LIFECYCLE PHASES
+
+> 当你执行一个gradle构建的时候，有三个重要阶段， initialization ,configuration,和execution.如上图
+> 在初始化阶段，gradle创建一个project 实例，给定的build script仅仅是一个单独的project， 在多Project上下文里， 构建阶段就
+> 十分重要，依据你正在执行哪个项目构建，gradle找出项目构建过程中实际的依赖，在初始化阶段你的build script代码不会执行 
+
+> 构建阶段下一个阶段是配置阶段，gradle构建一个model参与任务构建，此阶段非常适合设置您的项目或特定任务所需的配置。
+
+>下一个阶段是执行阶段，按照依赖顺序执行，如果任务被认为没有修改过，将被跳过
