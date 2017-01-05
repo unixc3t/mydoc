@@ -11,7 +11,7 @@ names = []
 values = []
 data_all = {}
 
-add_nor_col = ['stand LP', "stand MP", "stand HP", "stand LK", "stand MK", "stand HK", "crouch LP", "crouch MP", "crouch HP", "crouch LK", "crouch MK", "crouch HK", "jump LP", "jump MP", "jump HP", "jump LK", "jump MK", "jump HK", "Tenmakujinkyaku", "Zugaihasatsu", "Sekiseiken", "Tenha", "Kikokurenzan", "Kongoken", "Goshoha", "Shuretsuzan", "Dohatsu Shoten", "Rakan", "Rakan Gosho", "Rakan Gokyaku", "Gosenkyaku", "Gohadouken LP", "Gohadouken MP", "Gohadouken HP", "Gohadouken EX", "Sekia Goshoha LP", "Sekia Goshoha MP", "Sekia Goshoha HP", "Sekia Goshoha EX", "Zanku Hadouken LP", "Zanku Hadouken MP", "Zanku Hadouken HP", "Zanku Hadouken EX", "Goshoryuken LP", "Goshoryuken MP", "Goshoryuken HP", "Goshoryuken EX", "Tatsumaki Zankukyaku LK", "Tatsumaki Zankukyaku MK", "Tatsumaki Zankukyaku HK", "Tatsumaki Zankukyaku EX", "Air Tatsumaki Zankukyaku LK", "Air Tatsumaki Zankukyaku MK", "Air Tatsumaki Zankukyaku HK", "Air Tatsumaki Zankukyaku EX", "Hyakki Gozan LK", "Hyakki Gozan MK", "Hyakki Gozan HK", "Hyakki Gozan EX", "Hyakkishu LK > Hyakki Gosho", "Hyakkishu MK > Hyakki Gosho", "Hyakkishu HK > Hyakki Gosho", "Hyakkishu EX > Hyakki Gosho", "Hyakkishu LK > Hyakki Gojin", "Hyakki Gojin EX", "Hyakkishu LK > Hyakki Gosai", "Hyakkishu MK > Hyakki Gosai", "Hyakkishu HK > Hyakki Gosai", "Hyakkishu EX > Hyakki Gosai", "Hyakki Gozanku", "Hyakki Gorasen", "Ashura Senku (fwd)", "Ashura Senku (back)", "Sekia Kuretsuha"]
+#add_nor_col = ['stand LP', "stand MP", "stand HP", "stand LK", "stand MK", "stand HK", "crouch LP", "crouch MP", "crouch HP", "crouch LK", "crouch MK", "crouch HK", "jump LP", "jump MP", "jump HP", "jump LK", "jump MK", "jump HK", "Tenmakujinkyaku", "Zugaihasatsu", "Sekiseiken", "Tenha", "Kikokurenzan", "Kongoken", "Goshoha", "Shuretsuzan", "Dohatsu Shoten", "Rakan", "Rakan Gosho", "Rakan Gokyaku", "Gosenkyaku", "Gohadouken LP", "Gohadouken MP", "Gohadouken HP", "Gohadouken EX", "Sekia Goshoha LP", "Sekia Goshoha MP", "Sekia Goshoha HP", "Sekia Goshoha EX", "Zanku Hadouken LP", "Zanku Hadouken MP", "Zanku Hadouken HP", "Zanku Hadouken EX", "Goshoryuken LP", "Goshoryuken MP", "Goshoryuken HP", "Goshoryuken EX", "Tatsumaki Zankukyaku LK", "Tatsumaki Zankukyaku MK", "Tatsumaki Zankukyaku HK", "Tatsumaki Zankukyaku EX", "Air Tatsumaki Zankukyaku LK", "Air Tatsumaki Zankukyaku MK", "Air Tatsumaki Zankukyaku HK", "Air Tatsumaki Zankukyaku EX", "Hyakki Gozan LK", "Hyakki Gozan MK", "Hyakki Gozan HK", "Hyakki Gozan EX", "Hyakkishu LK > Hyakki Gosho", "Hyakkishu MK > Hyakki Gosho", "Hyakkishu HK > Hyakki Gosho", "Hyakkishu EX > Hyakki Gosho", "Hyakkishu LK > Hyakki Gojin", "Hyakki Gojin EX", "Hyakkishu LK > Hyakki Gosai", "Hyakkishu MK > Hyakki Gosai", "Hyakkishu HK > Hyakki Gosai", "Hyakkishu EX > Hyakki Gosai", "Hyakki Gozanku", "Hyakki Gorasen", "Ashura Senku (fwd)", "Ashura Senku (back)", "Sekia Kuretsuha"]
 add_stats_col = [:health, :stun, :taunt, :nJump, :fJump, :bJump, :fDash, :bDash, :color, :phrase, :fWalk, :bWalk, :fJumpDist, :bJumpDist, :fDashDist, :bDashDist, :throwHurt, :throwRange]
 
 datas.each do |key, value|
@@ -19,14 +19,20 @@ datas.each do |key, value|
   values << value[:moves][:vtrigger]
   values << value[:stats]
 
+  value[:moves][:normal].each do |key,value|
+    add_nor_col << key
+  end
 
   value[:moves][:vtrigger].each do |key, value|
     add_vtr_col << key
   end
+  values << add_nor_col
   values<< add_vtr_col
+
   data_all[key.to_s] = values
   values=[]
   add_vtr_col =[]
+  add_nor_col=[]
 end
 
 p = Axlsx::Package.new
@@ -42,7 +48,7 @@ data_all.each do |key, value|
     wb.add_worksheet(:name => key.to_s) do |sheet|
       sheet.add_row add_rows2, :style => red_border
       value[0].each do |v, val|
-        add_nor_col.each do |k|
+        value[3].each do |k|
           temp =[]
           if v.to_s.downcase == k.to_s.downcase
             temp << v
@@ -59,7 +65,7 @@ data_all.each do |key, value|
       end
       sheet.add_row add_rows3, :style => blue_border
       value[1].each do |v, val|
-        value[3].each do |k|
+        value[4].each do |k|
           temp =[]
           if v == k
             temp << v
@@ -86,10 +92,10 @@ data_all.each do |key, value|
         end
       end
       sheet.add_row temp
-
+      sheet.add_row ["本文档不保证正确性,产生任何问题及责任自行承担， 文档编写者:码农与厨子,街霸交流群:218609529"]
     end
   end
 
 end
 
-p.serialize("example3.xlsx")
+p.serialize("example2.xlsx")
