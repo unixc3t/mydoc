@@ -328,3 +328,69 @@
 	![](p1.png)
 	![](p2.png)
 	
+>明确知道这些结果是有用的，让我们看看怎么使用他们，我们将转换所有的列表里的文件到html格式，使用#pathmap方法，pathmap(%X.html)可以很简单完成，
+>结果变成 ["file1.html", "file2.html", "sources/file3.html", "bin/file4.html"] .
+
+>下一个例子，我们将移动所有的文件到output目录下 下面代码实例
+	
+	>> list.pathmap('output/%f')
+	=> ["output/file1.txt", "output/file2.pdf", "output/file3.txt","output/file4"]
+
+> 如果需要扩展名
+	
+	>> list.pathmap('output/%X.html')
+	=> ["output/file1.html", "output/file2.html", "output/sources/file3.html", "output/bin/file4.html"]
+
+>使用下面代码组合你想组合的
+
+	>> list.pathmap('output%s%n%s%f')
+	=> ["output/file1/file1.txt", "output/file2/file2.pdf", "output/file3/Ifile3.txt", "output/file4/file4"]
+
+>%d符号可以有一个数字前缀，例如（%2d)如果，数字是正数，从左边开始返回符合数字大小的目录，如果是负数从右边返回符合数字大小的目录
+	
+	>> 'a/b/c/d/file.txt'.pathmap("%2d")
+	=> 'a/b'
+	>> 'a/b/c/d/file.txt'.pathmap("%-2d")
+	=> 'c/d'
+
+>有时你不得不从给定的文件列表里生成传递给命令行的一组参数， 例如，ruby脚本运行时，你需要包含需要的lib， 例如下面
+
+	$ ruby -Ilib/my_class -Ilib/common test/my_class_test.rb
+
+> 使用 @pathmap方法，可以更简单
+
+	require 'rake'
+	list = FileList['lib/my_class', 'lib/common']
+	ruby "#{list.pathmap('-I%p')} test/my_class_test.rb"
+
+> 上面我们使用一个新的方法，叫做ruby 它被定义在FileUtils模块里，接收传递给命令行的参数，执行ruby命令，FileLIst定义了to_s方法用来进行字符串插值。
+> 如果你想从FileList得到字符串形式文件列表，使用Array#to_s 方法示例如下
+
+	require 'rake'
+	list = FileList['lib/my_class', 'lib/common']
+
+	list.to_s  # => "lib/my_class lib/common"
+	
+    list.to_a.to_s # => "[\"lib/my_class\", \"lib/common\"]"
+    list.pathmap('-I%p').to_s  # => "-Ilib/my_class -Ilib/common"
+	list.pathmap('-I%p').to_a.to_s # => "[\"-Ilib/my_class\", \"-Ilib common\"]"
+
+>有一个更有用的特性用来从源目录到输出目录， %d , %p , %f , %n , %x , 和 %X 符号，
+>可以使用 匹配/替换， 匹配模式和替换部分，在大括号里用逗号分隔,代替部分应该在%后面，操作符前面， 例如 
+> %{in,out}d ,多个替换使用分好隔开 例如 %{in,out;old,new}d .
+
+	>> "app/assets/js/app.coffee".pathmap("%{^app/assets/js,public}X.js")
+	=> "public/app.js"
+
+>记住 %X返回的文件没有扩展名， 正则表达式也可以使用
+	
+	>> "app/assets/js/app.coffee".pathmap("%{^app/assets/(js),public/new-\\1}X.js")
+	=> "public/new-js/app.js"
+
+>如果你觉得#pathname和#ext方法很有用，你可以使用他们在你的项目里，按照下面代码来引用
+	
+	require 'rake/ext/string'
+
+> FileUtils模块的文档 [点击这里](http://goo.gl/ec4arH)
+
+#### A practical example of automatically generating a config file
