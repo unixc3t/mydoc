@@ -394,3 +394,49 @@
 > FileUtils模块的文档 [点击这里](http://goo.gl/ec4arH)
 
 #### A practical example of automatically generating a config file
+
+> 现在已经有了一些rake的知识储备，每个rails开发者都知道当他们有了一个rails新项目，第一步是创建database.yml文件， 不仅是繁琐操作，还包含很多大量
+>手动处理的地方，如果项目里有一个config/database.yml那么很幸运，你需要拷贝它到新项目，如果没有，你可能需要到互联网上找，然后再拷贝到新项目里， 
+>然后你需要修改配置，例如 username,password,adapter和database， 你不得不手动改变每个环境的变量， 我们决定自动化处理这些，代码如下
+	
+	require 'yaml'
+
+	desc 'Generates database.yml, optional arguments: [adapter, user,password]'
+	task :dbconfig => 'database.yml'
+
+	file 'database.yml', [:adapter, :username, :password] do |t, args|
+		Dir.chdir('config')
+		args.with_defaults(:project_path => Dir.pwd)
+		DBConfigGenerator.new(t, args).generate
+
+	end
+
+
+	class DBConfigGenerator
+		ENVIRONMENTS = %w(production development test)
+		DEFAULTS = {
+			'adapter' => 'postgresql',
+			'encoding' => 'unicode',
+			'username' => Etc.getlogin,
+			'pool' => 5,
+			'password' => nil
+		}
+	def initialize(task, options = {})
+    @database_pattern = "#{options[:project_path].pathmap('%-1d')}_%s"
+    @template = {}
+    @output_file = task.name
+    @defaults = DEFAULTS.tap do |defaults|
+
+      defaults.each_key do |k|
+        defaults[k] = options[k] if options[k]
+      end
+    end
+	end
+	def generate
+		ENVIRONMENTS.each do |env|
+			@template[env] = @defaults.merge('database' => @database_pattern % env)
+		end
+			File.write(@output_file, @template.to_yaml)
+	end
+	end
+	
