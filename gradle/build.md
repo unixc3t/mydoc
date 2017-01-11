@@ -241,8 +241,8 @@
 ##### ADDING A TASK CONFIGURATION BLOCK
 
 > 下面代码 声明一个task叫做loadVersion ，用来读取类版本号，从properties文件里并且分配一个新的ProjectVersion实例给project
-> version 属性， 表面看，这个task和前面定义的差不多，但是你仔细看，你会发现你没有定义一个action或者左 shif操作符 
-> gradle调用了一个 task configuration
+> version 属性， 表面看，这个task和前面定义的差不多，但是你仔细看，你会发现你没有定义一个action或者使用左位移操作符(<<) 
+> gradle叫这种代码为 task configuration block
 
     ext.versionFile = file('version.properties')
 
@@ -302,8 +302,8 @@
 
 >运行上面的任务，会修改版本好。并且将版本号写入文件里。
 > makeReleaseVersion可以作为一个任务生命周期里的一部分，在部署一个war文件到生产服务器时，你或许需要面对
-> 部署可能出错，网络故障，然后当你解决后，你想再次运行部署任务，因为makeReleaseVersion被声明作为一个依赖,对于你的
-> 部署任务，makeReleaseVersin自动返回了，等等，你刚才不是已经标记你的产品版本为projducttion-ready了，不是吗？不幸的是,gradle任务不知道
+> 部署可能出错，网络故障，然后当你解决后故障后，你想再次运行部署任务，因为makeReleaseVersion被声明作为一个依赖,对于你的
+> 部署任务，makeReleaseVersin再次自动运行，等等，你刚才不是已经标记你的产品版本为projducttion-ready了，不是吗？不幸的是,gradle任务不知道
 > 为了让gradle task 认识到这一点，你需要按照下面设置
 
 	task makeReleaseVersion(group:'versioning',
@@ -319,7 +319,8 @@
         }
 	}
 	
-
+> 你移动代码到一个 doLast action 闭包里，并且清晰的分割了配置代码和action代码
+> 现在，如果你执行2次这个任务，gradle知道这个project version已经被设置为release了，就跳过这个 task 
 
 #### Task inputs/outputs evaluation
 
@@ -327,4 +328,3 @@
 > 给input和outpus的值，在配置阶段就可读，
 >如果你需要实现一段逻辑输出， 这个upToDateWhen(Closure)方法，在对比input和output时，这个方法被运行如果闭包返回true， 这个任务被认为up to date
 
->现在，如果你执行2次这个任务，gradle知道这个project version已经被设置为release了，就跳过这个 task 
