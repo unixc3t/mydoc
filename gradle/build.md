@@ -153,6 +153,16 @@
 			logger.quiet "Version: $version"
 		}
 	}
+
+> 定义任务时传递任务类型参数
+
+	task hello(type: test) {
+		println(major) //这里直接访问test类里定义的major
+	}
+	
+	class test extends DefaultTask {
+		Integer major = 123
+	}
 	
 
 #### Defining task dependencies
@@ -270,3 +280,51 @@
 > 构建阶段下一个阶段是配置阶段，gradle构建一个model参与任务构建，此阶段非常适合设置您的项目或特定任务所需的配置。
 
 >下一个阶段是执行阶段，按照依赖顺序执行，如果任务被认为没有修改过，将被跳过
+
+
+
+#### Declaring task inputs and outputs
+
+> gralde确定一个任务是up to date，通过比较任务在两次编译时输入和输出的快照
+> 当最后一个任务执行完，任务的输入和输出没有改变，这个任务被认为up to date。
+> 仅仅当输入和输入有变化时，才会运行，否则就跳过
+> 输入可以是一个目录或，一个或多个文件，或者任意属性，输出可以是一个目录或者文件,输入和输出可以作为DefaultTask类的属性， 有明确的类关系
+> 假设你想创建一个任务，将你的项目发布成release版本， 你想改变项目版本从 snapshot到release, 下面的实例定义了一个新的任务分配boolean值
+> true给版本属性release， 任务也将版本属性改变值写入到属性文件里
+
+	task makeReleaseVersion(group:'versioning',
+		description: 'Makes project a release version') {
+		version.release = true
+        ant.propertyfile(file: destFile) {
+            entry(key: 'release', type: 'string', operation: '=', value: 'true')
+        }
+	}
+
+>运行上面的任务，会修改版本好。并且将版本号写入文件里。
+> makeReleaseVersion可以作为一个任务生命周期里的一部分，在部署一个war文件到生产服务器时，你或许需要面对
+> 部署可能出错，网络故障，然后当你解决后，你想再次运行部署任务，因为makeReleaseVersion被声明作为一个依赖,对于你的
+> 部署任务，makeReleaseVersin自动返回了，等等，你刚才不是已经标记你的产品版本为projducttion-ready了，不是吗？不幸的是,gradle任务不知道
+> 为了让gradle task 认识到这一点，你需要按照下面设置
+
+	task makeReleaseVersion(group:'versioning',
+		description: 'Makes project a release version') {
+
+		inputs.property('release', version.release)
+		outputs.file versionFile
+
+	     doLast {
+	          project.version.release = true
+	          ant.propertyfile(file: destFile) {
+              entry(key: 'release', type: 'string', operation: '=', value: 'true')
+        }
+	}
+	
+
+
+#### Task inputs/outputs evaluation
+
+> 记住，任务的input和outpus 是在配置阶段执行，链接任务依赖，这就是为什么要配置在configure block里，为了防止出错，确保赋值
+> 给input和outpus的值，在配置阶段就可读，
+>如果你需要实现一段逻辑输出， 这个upToDateWhen(Closure)方法，在对比input和output时，这个方法被运行如果闭包返回true， 这个任务被认为up to date
+
+>现在，如果你执行2次这个任务，gradle知道这个project version已经被设置为release了，就跳过这个 task 
