@@ -7,7 +7,7 @@
 
 >在gradle术语里,一个project代表你构建的组件,例如一个jar文件,或者一个全局目标,像开发一个
 >应用程序,你可能是来自maven的使用者,听到我前面说的可能很熟悉,gradle的build.gradle文件等价于maven的pom文件
->每个gradle构建脚本至少定义构建一个project,Gradle实例化org.gradle.api.Project类是基于你的在build.gradle的
+>每个gradle构建脚本至少定义构建一个project,Gradle实例化org.gradle.api.Project类,是基于你的在build.gradle的
 >配置,并且通过project变量使他隐式可用
 
 ![](build.png)
@@ -16,7 +16,7 @@
 >get和set方法得到,你不需要直接调用project变量,例如下面代码
 
 	setDescriptin("myProject")
-	prontln "Description of project $name: "+project.description
+	println "Description of project $name: "+project.description
 
 #### Tasks
 
@@ -328,3 +328,91 @@
 > 给input和outpus的值，在配置阶段就可读，
 >如果你需要实现一段逻辑输出， 这个upToDateWhen(Closure)方法，在对比input和output时，这个方法被运行如果闭包返回true， 这个任务被认为up to date
 
+#### Writing and using a custom task
+
+> makeReleaseVersion任务里的结构很简单，代码维护不会有问题，但是当你工作一段时间以后，简单的任务的代码可能会增长，你或许会加入更多逻辑，此时就需要重构
+> 你的代码到类和方法里，你可以按照你常规的产品代码那样来重构，gradle不建议用一种特殊方式来编写你的任务，你可以自己控制你代码风格，甚至是编程语言的选择，
+> 自定义任务有2部分组成，1 自定义任务类，封装了你的逻辑行为，也被成为task type， 2 真实任务类提供了属性值，通过task类暴露的属性，用来配置逻辑行为，
+> gradle叫这样的类为enhanced tasks
+> 可维护性仅仅是编写自定义类的优势之一，因为你正在处理一个真实类,任何方法通过完整的单元测试。enhanced tasks好处对于简单类，就是它的可重用性，自定义类
+> 暴露的属性可以单独设置
+
+#### WRITING THE CUSTOM TASK CLASS
+
+> 前面提到的，在你的构建脚本里gradle为每个简单任务创建一个DefaultTask类型的实例,当你创建一个自定义任务时，你需要做的是创建了一个继承DefaultTask的
+> 类， 实例如下
+
+	class ReleaseVersionTask extends DefaultTask {
+		//使用注解声明任务的输入输出
+		@Input 
+		Boolean release
+		@OutputFile 
+		File destFile
+
+	    //构造方法里声明任务组和描述
+		ReleaseVersionTask() {
+			group = 'versioning'
+			description = 'Makes project a release version.'
+		}
+		//注解声明方法被执行
+		@TaskAction
+		void start() {
+			project.version.release = true
+			ant.propertyfile(file: destFile) {
+				entry(key: 'release', type: 'string', operation: '=', value: 'true')
+			}
+		}
+	}
+
+>在上面代码中，你没有使用DefaultTask的属性来声明Inputs和outputs，而是使用了来自org.grdle.api.tasks的注解
+
+#### EXPRESSING INPUTS AND OUTPUTS THROUGH ANNOTATIONS
+
+> 任务的input和outpus注解给你的实现添加了语法糖，不仅仅实现TaskInputs和TaskOutput方法功能，他们也作为自动化文档。只要看一眼，
+> 你就清楚的知道输入的数据是什么，通过task输出是什么，查看文档，你会看到gralde提供很多注解
+> 在你自定义的类里面，@Input注解声明了输入属性release，和@OuputInput注解定义了输出文件， 使用这两个注解不是唯一选择，你也可以使用
+> getter方法
+
+#### Task input validation
+
+> 在配置期间，@Input注解会验证属性值，如果值是Null, gradle将会跑出一个TaskValistaionException，如果允许值为null，可以使用@option
+>注解标记属性
+
+#### using the custom task
+
+> 你实现了一个自定义task,并且创建了一个action方法同时暴露了可配置的属性，但是怎样使用他们呢，在你的构建脚本里，你需要创建一个
+> ReleaseversionTask类型task，设置输入和输出，通过分配他的属性值，下面代码实例展示这个， 被认为创建一个新的特殊类实例，并在构造方法中
+> 设置属性值，
+
+	//定义一个ReleaseVersionTask的真实task
+	task makeReleaseVersion(type: ReleaseVersionTask) {
+		//设置task的属性值
+		release = version.release
+		destFile = versionFile
+	}
+
+> 正如你期待的，这个真实任务，makeReleaseVersion 的行为和简单task一样
+
+#### APPLIED CUSTOM TASK REUSABILITY
+
+> 假设你想使用自定义的任务在另一个项目里，在那个项目里的需求不同，表示版本的pogo暴露了不同的属性来表示版本结构， 如下代码
+	
+	class ProjectVersion {
+		Integer min
+		Integer maj
+		Boolean prodReady
+		@Override
+		String toString() {
+			"$maj.$min${prodReady? '' : '-SNAPSHOT'}"
+		}
+	}
+
+> 此外，项目拥有者决定命名版本文件，project-version.properties代替version.properties. 如何使真是类适应这个需求呢？ 你只需要
+> 分配不同的值给暴露的属性，如下，自定义类可以自己处理需求改变
+
+	task makeReleaseVersion(type: ReleaseVersionTask) {
+		release = version.prodReady
+		destFile = file('project-version.properties')
+	}
+
+> gralde自带了很多开箱即用的task 用于常规需求，例如 拷贝，删除文件，创建zip压缩包， 下一节我们详细了解
