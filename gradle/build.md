@@ -332,8 +332,9 @@
 
 > makeReleaseVersion任务里的结构很简单，代码维护不会有问题，但是当你工作一段时间以后，简单的任务的代码可能会增长，你或许会加入更多逻辑，此时就需要重构
 > 你的代码到类和方法里，你可以按照你常规的产品代码那样来重构，gradle不建议用一种特殊方式来编写你的任务，你可以自己控制你代码风格，甚至是编程语言的选择，
-> 自定义任务有2部分组成，1 自定义任务类，封装了你的逻辑行为，也被成为task type， 2 真实任务类提供了属性值，通过task类暴露的属性，用来配置逻辑行为，
-> gradle叫这样的类为enhanced tasks
+> 自定义任务有2部分组成，
+> 1 自定义任务类，封装了你的逻辑行为，继承了DefaultTask类,也被成为task type， 
+> 2 真实任务类提供了属性值，通过task类暴露的属性，用来配置逻辑行为， gradle叫这样的类为enhanced tasks
 > 可维护性仅仅是编写自定义类的优势之一，因为你正在处理一个真实类,任何方法通过完整的单元测试。enhanced tasks好处对于简单类，就是它的可重用性，自定义类
 > 暴露的属性可以单独设置
 
@@ -416,3 +417,29 @@
 	}
 
 > gralde自带了很多开箱即用的task 用于常规需求，例如 拷贝，删除文件，创建zip压缩包， 下一节我们详细了解
+
+#### USING TASK TYPES
+
+> gradle的内建任务都来自于DefaultTask类，用于增强task中，下面例子展示了zip和copy任务类型用于产品发布
+
+	task createDistribution(type: Zip, dependsOn: makeReleaseVersion) {
+		from war.outputs.files  //引是引用了war task任务输出
+		from(sourceSets*.allSource) { //使用了所有源文件，并且将他们打包到zip文件的src目录
+			into 'src'
+        }
+		from(rootDir) {
+			include versionFile.name  //添加到版本文件到zip里
+		}
+	}
+
+	task backupReleaseDistribution(type: Copy) {
+		from createDistribution.outputs.files  //引是引用了createCistributin的输出
+		into "$buildDir/backup"
+	}
+	task release(dependsOn: backupReleaseDistribution) << {
+		logger.quiet 'Releasing the project...'
+	}
+
+> 在上面的代码中，以不同的方式告诉zip和copy任务，需要包含什么样的文件，并且文件放到哪里,AbstractCopyTask中的很多方法可以在这里使用，
+
+#### TASK DEPENDENCY INFERENCE
