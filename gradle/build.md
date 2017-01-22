@@ -443,3 +443,82 @@
 > 在上面的代码中，以不同的方式告诉zip和copy任务，需要包含什么样的文件，并且文件放到哪里,AbstractCopyTask中的很多方法可以在这里使用，
 
 #### TASK DEPENDENCY INFERENCE
+
+> 你或许注意到了上面示例代码中，任务依赖通过dependsOn方法直接声明，然而一些task没有直接依赖其他task,例如createDistribution对于war，
+> 那么gradle怎么预先知道依赖的任务，通过使用一个任务的输出作为另一个任务的输入，依赖关系被这样推断出来，看下面整个执行过程
+	
+![](b3.png)
+
+> 在运行构建以后，你应该看到生成的zip文件，在/build/distributins目录里，整个目录是用于归档任务的默认目录，你也可以修改不同的目录，通过
+> destinationDir属性， 下面目录展示了构建后的结构
+	
+	build
+    ├── backup
+	│
+	└── todo-webapp-0.1.zip
+	├── distributions
+	│
+	└── todo-webapp-0.1.zip
+	└── libs
+	└── todo-webapp-0.1.war
+	build.gradle
+	src
+	version.properties
+
+#### task rules
+
+> 有时你会发现你自己在某种情况下，写了多个任务做着类似的事情，例如，你想通过2个task扩展你的版本管理功能，一个增加主版本号，另一个做一样的
+> 工作增加副版本号，两个任务都支持改变版本文件，比较下面代码发现基本上都是重复代码
+	
+	
+		task incrementMajorVersion(group: 'versioning', description: 'Increments project major version.') << {
+			String currentVersion = version.toString()
+			++version.major
+			String newVersion = version.toString()
+			logger.info "Incrementing major project version: $currentVersion -> $newVersion"
+			ant.propertyfile(file: versionFile) {
+				entry(key: 'major', type: 'int', operation: '+', value: 1)
+			}
+		}
+		task incrementMinorVersion(group: 'versioning', description: 'Increments project minor version.') << {
+			String currentVersion = version.toString()
+			++version.minor
+			String newVersion = version.toString()
+
+	        logger.info "Incrementing minor project version: $currentVersion -> $newVersion"
+                   ant.propertyfile(file: versionFile) {
+					   entry(key: 'minor', type: 'int', operation: '+', value: 1)
+				   }
+	    }
+
+	
+####   TASK RULE - NAMING PATTERN
+
+> gradle引入了task规则的概念，基于一个task的名字运行特定的逻辑， 这个模式包含两部分组成，静态的名字部分和占位符，组合在一起就是动态task名称，
+> 如果你想在前面的例子使用task规则，命名模式应该类似这样increment<Classifier>Version,当在命令行执行这个task规则时，你将以驼峰命名形式
+> 指定替换占位符
+
+##### Task rules in practice
+
+> 一些gradle核心插件充分利用了task rule， 其中之一就是java plugin定义的 clean<TaskName>,删除制定的task输出，例如，运行gradle
+> cleanCompileJava 将会删除所有的编译后的java类文件。
+
+#### DECLARING A TASK RULE
+
+> 你仅仅是了解了给task rule定义一个命名模式，但是怎样实际声明一个task rule在你的构建脚本里？ 加入task rule到你的项目里，你需要引用 
+> TaskContainer, 一旦拥有了引用，你可以调用addRule(String,closure)方法， 第一个参数提供描述，例如task名字模式，第二个参数描述了应用于规则的要执行的闭包
+> 遗憾的是，这没有直接方式创建一个task rule，通过来自Project方法，创建简单的task那样， 对于如何加入一个task rule有一个基本了解后，你可以
+> 编写真实的闭包实现他们
+
+![](b4.png)
+
+
+> 上图所示，简单的task可以通过project实例的方法添加，task rule仅仅只能通过task container添加， 所以调用getTasks方法得到它的引用
+
+	tasks.addRule("Pattern: sample<ID>") { String taskName ->
+		if (taskName.startsWith("sample")) {
+			task(taskName) << {
+				println taskName - 'sample'
+			}
+		}
+	}
