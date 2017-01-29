@@ -274,7 +274,7 @@
 ###### GRADLE ’ S BUILD LIFECYCLE PHASES
 
 > 当你执行一个gradle构建的时候，有三个重要阶段， initialization ,configuration,和execution.如上图
-> 在初始化阶段，gradle创建一个project 实例，给定的build script仅仅是一个单独的project， 在多Project上下文里， 构建阶段就
+> 在初始化阶段，gradle创建一个project实例，给定的build script仅仅是一个单独的project， 在多Project上下文里， 初始化阶段就
 > 十分重要，依据你正在执行哪个项目构建，gradle找出项目构建过程中实际的依赖，在初始化阶段你的build script代码不会执行 
 
 > 构建阶段下一个阶段是配置阶段，gradle构建一个model参与任务构建，此阶段非常适合设置您的项目或特定任务所需的配置。
@@ -559,3 +559,82 @@
 > 利用隐式task依赖机制来建立这些链接，最重要的是DAG永远不会闭环，换句话说，一个task不会被执行2次， 下面是前面例子的DAG图
 	
 ![](b6.png)
+
+#### Hooking into the task execution graph
+
+>回忆前面实现的makeReleaseVersion任务，自动执行，作为release任务的依赖，代替编写一个任务去显示一个产品版本，你可以达到一样目的，通过
+>编写生命周期钩子，因为构建知道哪些task将参加构建，在他们执行之前，你可以查询task图来确定它是否存在，
+
+![](b7.png)
+
+
+> 下一步将你的钩子放到适合的地方， 通过调用whenReady去注册一个闭包来扩建构建脚本，在task图生成后立即执行，
+> 因为你知道逻辑被运行在任何tasks图中任务之前运行，你可以完全移除makeReleaseVersion和删除dependsOn声明
+
+	gradle.taskGraph.whenReady { TaskExecutionGraph taskGraph ->
+	if(taskGraph.hasTask(release)) {
+		if(!version.release) {
+			version.release = true
+				ant.propertyfile(file: versionFile) {
+					entry(key: 'release', type: 'string', operation: '=', value: 'true')
+				}
+			}
+		}
+	}
+
+#### Implementing a task execution graph listener
+
+> 通过监听器挂接到构建生命周期只需要2个步骤，1 实现监听接口在构建脚本中，2注册实现类
+> 监听执行图事件由TaskExecutionGraphListener接口提供，你仅仅需要实现一个方法graphPopulate(TaskExecutionGraph),如下图
+
+![](b8.png)
+
+>注册一个TaskExecutionGraphListener监听器方式，通过常规的addListener方法或者通过一个指定的监听器类型的特殊的方法
+>记住如果添加监听器到你的构建脚本中，你就不能直接访问project实例了。但是，你可以充分使用gradle api。
+
+
+	class ReleaseVersionListener implements TaskExecutionGraphListener {
+		final static String releaseTaskPath = ':release'
+		@Override
+		void graphPopulated(TaskExecutionGraph taskGraph) {
+			if(taskGraph.hasTask(releaseTaskPath)) {
+				List<Task> allTasks = taskGraph.allTasks
+				Task releaseTask = allTasks.find {it.path == releaseTaskPath }
+				Project project = releaseTask.project
+				if(!project.version.release) {
+					project.version.release = true
+				project.ant.propertyfile(file: project.versionFile) {
+					entry(key: 'release', type: 'string', operation: '=',value: 'true')
+					}
+				}
+			}
+		}
+	}
+	def releaseVersionListener = new ReleaseVersionListener()
+	gradle.taskGraph.addTaskExecutionGraphListener(releaseVersionListener)
+
+> 你并没有被局限到只能在构建脚本中注册监听器，生命周期逻辑可以用于监听gradle事件，任何task执行之前。
+
+#### Initializing the build environment
+
+>你想知道一个构建之后，得到通知，想知构建成功还是失败，想知道多少任务被执行，一个gradle核心插件之一 ，build-announcements，提供了发送通知
+>给本地系统
+>初始化脚本会在任何构建逻辑之前运行，编写一个初始化脚本，将他用于你的项目，不需要人工干预，
+>在<USER_HOME>/.gradle/init.d下创建初始化脚本， 如下代码
+	
+	.
+	└── .gradle
+		└── init.d
+			└── build-announcements.gradle
+
+>gradle将执行每一个在init.d目录下以.grale扩展名的文件，因为你想让插件在任何构建逻辑之前运行，最适合的方法就是Gradle#projectLoaded(Closure)
+> 下面代码片段，展示了使用build-announcements
+	
+	gradle.projectsLoaded { Gradle gradle ->
+		gradle.rootProject {
+			apply plugin: 'build-announcements'
+		}
+	}
+
+>在上下文中，重要的一课就是一些生命周期事件仅仅被激活在适当的地方， 例如， 使用Gradle#projectsLoaded(Closure)方法绑定的闭包在build.gradle 
+>中声明就不会被激活，因为project 创建发生在初始化阶段
