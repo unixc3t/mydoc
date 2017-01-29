@@ -522,3 +522,40 @@
 			}
 		}
 	}
+
+#### Building code in buildSrc directory
+
+> 将构建代码放到buildSrc目录下是一个好的选择，也是构建代码的最佳实践，你可以在你的其他项目里采用这种结构方式
+> gradle在buildSrc目录下使用标准的源码结构，java代码需要在src/main/java目录下， groovy代码被放在src/main/groovy下，任何在这些目录里的代码
+> 都会被自动编译，并放到你的构建脚本的classpath中.
+
+> 注意提取类到源文件中需要做一些额外的工作，从构建脚本中定义类和源文件定义一个类的不同之处就是需要导入grale api， 下面示例，
+
+	package com.manning.gia
+	import org.gradle.api.DefaultTask
+	import org.gradle.api.tasks.Input
+
+	import org.gradle.api.tasks.OutputFile
+	import org.gradle.api.tasks.TaskAction
+	class ReleaseVersionTask extends DefaultTask {
+		(...)
+	}
+
+> 在build script中定义类不需要import api ，单独定义一个类就需要
+> 相应地，你的build script需要导入编译后的classes文件，从buildscr中，例如从 com.manning.gir.RealeaseVersionTask 
+
+#### Hooking into the build lifecycle
+
+> 一个生命周期时间可能发生在某个特殊的构建阶段的开始，期间或者之后
+> 假设你想尽早的在开发周期中得到编译失败的信息，一个典型的反应就是发送构建失败信息给开发人员，这有两种方式编写反馈信息，使用闭包或者实现gradle 监听
+> api,gradle没有限制你使用哪种方式，使用一个实现监听接口的类的优势是有完整的单元测试， 完整的生命周期如下图
+
+![](b5.png)
+
+
+#### INTERNAL TASK GRAPH REPRESENTATION
+
+> 在配置阶段，gradle决定任务在执行阶段的顺序，表示内部结构是一个有向无环图，每个任务是一个节点，每个节点通过有向边链接起来，你可能通过depnedOn或者
+> 利用隐式task依赖机制来建立这些链接，最重要的是DAG永远不会闭环，换句话说，一个task不会被执行2次， 下面是前面例子的DAG图
+	
+![](b6.png)
