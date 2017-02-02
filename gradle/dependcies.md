@@ -73,3 +73,47 @@
 
 
 #### Dependency configurations
+
+> 插件能够引入配置定义依赖的作用域，java插件带来很多标准的配置定义java构建生命周期的依赖，例如，加入编译配置加入编译产品需要的依赖， 在构建web
+> 应用程序时，你使用编译配置声明一个依赖于apachhe commons lang 库，通过熟悉gradle api 我们了解这些配置
+
+#### Understanding the configuration API representation
+
+> 配置可以直接在项目的根级别添加访问，你可以决定使用哪个插件提供的配置，或者自己的配置声明，每个项目拥有自己的ConfigurationContainer类容器管理
+> 对应的配置，配置在行为上很灵活，你可以决定传递依赖性是否包含在解析方案里，定义解析策略
+
+![](b10.png)
+
+> 另一种配置方式是逻辑分组，通过分组依赖类似java类的包概念，包结构提供了唯一的命名空间，也适用于配置，
+> java插件提供了6中开箱即用配置，compile , runtime , testCompile , testRuntime , archives , 和default
+
+#### Defining a custom configuration
+
+> 明确定义cargo需要的依赖，你需要声明一个新的配置使用唯一名称cargo，例子如下
+
+	configurations {
+		cargo {
+			description = 'Classpath for Cargo Ant tasks.'
+			visible = false
+		}
+	}
+	
+	
+#### Accessing a configuration
+
+> 本质来说 ant任务就是扩展了ant的java类，用来自定义逻辑，如果添加一个自定义的ant task，例如cargo部署任务， 你需要使用taskdef声明ant task
+> 下面代码展示了如何简单的访问配置，通过名字， 这个task使用了依赖很明确
+	
+	
+![](b11.png)
+
+#### Declaring dependencies
+
+> dsl配制块dependencies 用于分配一个多个依赖， External dependencies 不是你唯一可以声明的依赖， 如下图各种类型依赖
+	
+![](b12.png)
+	
+
+#### Understanding the dependency API representation
+
+
