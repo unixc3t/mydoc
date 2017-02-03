@@ -116,4 +116,116 @@
 
 #### Understanding the dependency API representation
 
+> 每个gradle项目都有一个依赖管理器实例，由DependencyHandler接口来表现，你使用项目的getDependencies方法获得管理器引用，上图中显示的依赖类型，都可以通过使用项目配置块的依赖
+>处理器的方法来声明，每个依赖都是Dependency类型的实例，group , name , version , 和 classifier标识一个依赖， 下图描述了项目，依赖处理器，实际依赖的关系
 
+
+![](b13.png)
+
+#### External module dependencies
+
+> 在gralde的术语中，外部类库，通常以jar文件形式存在，被称为外部模块依赖，他们代表的依赖模块在项目结构之外，这种依赖可以在仓库中通过属性明确标识
+
+
+#### DEPENDENCY ATTRIBUTES
+
+> 当一个依赖管理器寻找依赖时，通过属性组合来查找，一个依赖至少需要提供名字，以hiberant核心库来作为例子介绍
+	
+> group: 这个属性用来定义一个，组织，公司或者项目，group属性可以使用点符号"."这个不是强制性的， 例如 org.hiberante
+> name: 一个工件的唯一名字，用来描述依赖， 例如hibernate-bore
+> version: 一个库可能有很多版本， 大部分使用主版本和次版本号， 例如，3.6.3-final
+> classifier: 有时一个工件定义另一个属性 classifier，用来区别与有相同的group,name和version的工件，他需要进一步规范，例如运行环境， hiberante核心库没有提供这个
+
+#### DEPENDENCY NOTATION
+
+	dependencies {
+		configurationName dependencyNotation1, dependencyNotation2, ...
+	}
+
+> 你首先给出配置的名字，你想分配依赖给他，依赖标记分为两种， 一种以map形式映射，另一种使用冒号分割
+> 在配置定义后，你能够很容易使用它分配给cargo相关依赖， 使用cargo在你的项目里，你需要通过包含cargo api， 核心容器的实现，ant task的jar文件， cargo提供了一个uberjar
+> 一个独立的打包的jar文件，包含所有功能， 让依赖管理更简单，下面代码展示了如何分配cargo依赖给cargo配置
+
+	ext.cargoGroup = 'org.codehaus.cargo'
+	ext.cargoVersion = '1.3.1'
+	dependencies {
+		//map形式
+		cargo group: cargoGroup, name: 'cargo-core-uberjar',version: cargoVersion
+		//字符串形式声明
+		cargo "$cargoGroup:cargo-ant:$cargoVersion"
+	}
+
+> 如果你处理很多依赖在你的项目里，取出常用属性作为扩展属性是很有帮助的， 上面例子创建了cargo依赖的group和version属性
+> gradle没有默认的仓库给你，让是运行没有使用仓库的deployToLocalTomcat任务会报错，
+
+	repositories {
+		mavenCentral()
+	}
+
+> 为了使例子通过，我们简单配置一下仓库，稍后详解
+
+#### INSPECTING THE DEPENDENCY REPORT
+
+
+> 当你运行 dependencies帮助任务时，会打印出完整的依赖树， 这个树展示给你脚本中顶层依赖和他们的传递性依赖
+> 如果你认真检查依赖树，你会看到使用星号标记的依赖被忽略了，
+	
+	   commons-logging:commons-logging:1.0.4 (*)
+
+> 例如上面代码所示，这意味着依赖管理器选择了一样或者另一个版本的库，因为他被声明为另一个顶层依赖的传递性依赖，gradle默认冲突策略是，最新的优先，如果依赖图包含两个一样名字的库，选择新的，
+> xml-apis例子，gradle选择了 1.3.03而不是1.0.b2, 通过箭头来指示-> 
+ 
+	xml-apis:xml-apis:1.0.b2 -> 1.3.03
+
+
+#### EXCLUDING TRANSITIVE DEPENDENCIE
+
+> 当使用一个公共maven仓库时候，像maven中央仓库，你获取遇到缺少维护的依赖元数据，gradle允许你完整的控制传递性依赖或者选择排除特殊的依赖，假设你想使用不同的版本的xml-api替代
+>Uberjar的传递性依赖的xml-api版本，如下代码
+	
+	dependencies {
+		cargo('org.codehaus.cargo:cargo-ant:1.3.1') {
+			exclude group: 'xml-apis', module: 'xml-apis'
+		}
+		cargo 'xml-apis:xml-apis:2.0.2'
+	}
+
+> 注意上面， 排除属性和正规的依赖标识的轻微不同，你可以使用group和/或者module。gradle不允许你排除一个指定版本好的依赖，所以version不可用
+
+> 有时，依赖的元数据声明的传递性依赖没有在仓库中，结果你编译失败，唯一的解决办法就是排除所有的传递性依赖使用transitive属性，如下图
+
+	dependencies {
+		cargo('org.codehaus.cargo:cargo-ant:1.3.1') {
+		transitive = false
+	}
+	// Selectively declare required dependencies
+	}
+
+
+##### DYNAMIC VERSION DECLARATION
+
+> 动态版本声明有自己的语法，如果你想使用一个依赖最后的版本，使用占位符号，lastest.integration 例如声明需要的cargo ant task 最后的版本 使用，
+> codehaus.cargo:cargo-ant:latest-integration,或者另一个选项使用加号+
+	
+	dependencies {
+		cargo 'org.codehaus.cargo:cargo-ant:1.+'
+	}	
+
+
+#### file dependcies
+
+> 前面描述的,项目没有使用自动依赖挂你组织他们外部依赖库， 例如当你将项目迁移到gradle，你不想立刻改变项目的结构，gradle让你简单的配置依赖，你可以为你的项目引用本地系统的依赖库
+> 下面示例，展示了从maven仓库拷贝到libs/cargo目录下 
+	
+	task copyDependenciesToLocalDir(type: Copy) {
+		from configurations.cargo.asFileTree
+		into "${System.properties['user.home']}/libs/cargo"
+	}
+
+> 然后你可以声明cargo库在你的依赖配置块里， 如下:
+	
+	dependencies {
+		cargo fileTree(dir: "${System.properties['user.home']}/libs/cargo", include: '*.jar')
+	}
+
+#### Using and configuring repositories
