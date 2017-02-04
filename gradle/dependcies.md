@@ -229,3 +229,96 @@
 	}
 
 #### Using and configuring repositories
+
+> 使用单独的方法mavenCentral()，你可以使用最流行的java仓库，除了使用预配置的仓库，你还可以使用一个url路径，路径地址可以使maven
+> 或者ivy仓库， 文件系统仓库也可以用来作为依赖。
+> 仓库的种类
+> maven repository : 本地文件系统或者远程服务器，或者预配置的maven仓库
+> ivy repository: 本地文件系统，远程服务器，或者特殊的扁平结构
+> flat directory respostory : 没有元数据支持的本地文件系统
+
+#### Understanding the repository API representation
+
+> 项目中定义仓库的核心接口是RepositoryHandler，这个接口提供了方法添加各种仓库，repositories配制块里调用这些方法，你可以声明
+> 多个仓库，依赖管理器尝试下载依赖和元数据按照你定义仓库的顺序寻找，先找到依赖的仓库优先级高，剩下的仓库就不会再去查找，
+
+![](b14.png)
+
+
+#### Maven repositories
+
+>maven仓库是java项目最常用的仓库之一，类库以jar文件形式存在，元数据通过xml在pom文件里描述相关信息和传递性依赖，两种工件都存储在
+>仓库中预定义好的目录中， 当你在你的构建脚本中声明一个依赖，它的属性用于计算出在仓库中的精确位置，group属性中的“.”符号指出maven仓库
+>中的子目录， 如下图，显示了cargo ant依赖属性映射仓库中jar文件和Pom文件h位置
+	
+	
+![](b15.png)
+
+> RepositoryHandler 提供了2种接口方法添加预定义maven仓库，一个是mavenCentral方法添加Maven Central到仓库列表， 另一个方法
+> 就是mavenLocal方法添加一个本地仓库到你的文件系统 
+
+#### ADDING THE PRECONFIGURED M AVEN C ENTRAL REPOSITORY
+
+> maven central是构建常用的仓库， gradle想让构建者使用它更容易，提供了一个简化声明替代url,http://repo1.maven.org/maven2
+> 使用mavenCentral()方法如下代码片段
+	
+	repositories {
+		mavenCentral()
+	}
+
+#### ADDING THE PRECONFIGURED LOCAL MAVEN REPOSITORY
+
+> 当gradle解析一个依赖的时候，在仓库中找到它，然后下载，存储在本地缓存， 缓存的位置是你本地的文件系统，与maven存储下载后的工件目录不同，
+> 你或许想知道什么时候使用本地maven仓库，假设你使用maven构建一个库，另一个项目使用gradle并且引用了这个库， 在开发期间，防止发布到远程
+> 仓库浪费时间，gradle提供了一个本地仓库
+
+	repositories {
+		mavenLocal()
+	}
+
+#### ADDING A CUSTOM MAVEN REPOSITORY
+
+> 有很多原因你想设置一个仓库而不是使用maven中央仓库，或许一个特殊的依赖很简单但是不可用，或者你想确保构建可靠使用自己的企业仓库， 
+>仓库管理器让你可以配置使用maven布局的仓库，这意味着它遵守我们前面讨论的工件存储模式，也可以通过提供验证信息访问仓库， gradle
+> 提供两种方式配置仓库，maven和mavenRepo，下面展示了如果工件不在maven central仓库中的另一个仓库选择
+	
+	repositories {
+		mavenCentral()
+		maven {
+		name 'Custom Maven Repository',
+		url 'http://repository-gradle-in-action.forge.cloudbees.com/release/')
+		}
+	}
+
+#### Ivy repositories
+
+> maven仓库中的工件以一种固定方式存储，任何结构偏差导致依赖不可读，另一方面，ivy仓库提供了一个默认布局，并且可定制， 在ivy仓库中
+> 仓库依赖元数据被存储在叫做ivy.xml文件中， gradle提供了一个灵活的方法配置ivy仓库和和布局， 假设你想让cargo依赖一个ivy仓库，
+> 示例如下
+
+	repositories {
+		ivy {
+			url 'http://repository.myenterprise.com/ivy/bundles/release'
+			layout 'pattern', {
+				artifact '[organisation]/[module]/[revision]/[artifact]-[revision].[ext]'
+				ivy '[organisation]/[module]/[revision]/ivy-[revision].xml'
+			}
+		}
+	}
+
+#### Flat directory repositories
+
+> 最简单和基本的就是扁平目录仓库，它是文件系统上的一个目录，只包含jar文件，没有元数据，如果你使用手动管理你的项目源码，并且计划迁移到
+> 自动依赖管理，这种方案适你也许感兴趣
+> 当你需要一个依赖时，你仅仅需要声明使用属性名字和版本， group属性导致不明确依赖关系，实例如下
+	
+	repositories {
+		flatDir(dir: "${System.properties['user.home']}/libs/cargo", name: 'Local libs directory')
+	}
+
+	dependencies {
+		cargo name: 'activation', version: '1.1'
+		cargo ':jaxb-api:2.1', ':jaxb-impl:2.1.13', ':jaxen:1.0-FCS'
+}
+
+#### Analyzing the cache structure
