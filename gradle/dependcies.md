@@ -322,3 +322,95 @@
 }
 
 #### Analyzing the cache structure
+
+> 你知道gradle下载部署任务运行时需要的jar文件放到哪里了么？ 如果搜索gradle论坛，你会发现很多用户也在寻找这个问题答案， 你可以使用gradle api找出答案，
+>  下面代码展示如何找到依赖路径
+
+	task printDependencies << {
+		configurations.getByName('cargo').each { dependency ->
+		println dependency
+		}
+	}
+
+> 运行上面代码 打印结果之一 /Users/benjamin/.gradle/caches/artifacts-15/filestore :
+> 上面的路径也许和你的机器上的不同，用来存储依赖的gradle根目录是<USER_HOME>/.gradle/caches，后面的路径artifact-15是一个标识符，指定gradle版本，
+> 新版的gradle结构可能有所不同，实际上缓存被分为两个部分， filestore包含所有的下载的二进制库，还有一些二进制文件存储了工件元数据信息，你不需要查看这些，
+
+
+#### Notable caching features
+
+> 有这样一个场景，你脚本中声明一个依赖，然后运行构建，下载需要的库，然后存储在缓存中，后续构建也是用这个库，从缓存中，如果仓库结构变化，这个库重命名或者删除，的移动
+> 许多依赖管理器会使用缓存中的依赖，同样构建很好，但是其他开发人员机器上运行构建，可能构建就会失败，这种情况，gradle采用不同方案，知道依赖源在哪里，
+
+#### ARTIFACT CHANGE DETECTION
+
+> gradle试图减少与远程仓库的通信，不全是因为依赖已经下载了，如果一个依赖不能够从仓库下载， 元数据会存储在缓存中，gradle使用这些信息避免检查远程仓库
+
+#### REDUCED ARTIFACT DOWNLOADS AND IMPROVED CHANGE DETECTION
+
+> gradle提供了与maven本地仓库的紧密集成避免下载已经存在的依赖库， 如果一个依赖在本地被发现，就会重用它
+> 如果一个工件在仓库中发生改变，gralde使用比较本地和远程仓库的哈希值得知， 没改变的工件不会再下载，重复使用本地缓存的，假设工件改变了。但是和本地仓库中的仍然一样，
+> 一个仓库的管理员替换了旧工件，但是使用一样的版本，就会发生这种情况，最终，构建使用一个过时的版本工件，gradle管理器试图解决这种问题通过外部的信息，例如http头信息中的
+> 文件长度，最后时间，这些信息保证工件一致性，
+
+#### OFFLINE MODE
+
+> 如果构建中声明了远程仓库，grale或许在依赖变化时会检查他们，有时这个行为不可取，例如你在出差访问不了互联网，你能够使用命令告诉gradle避免访问互联网， --offline参数可以
+> 达到这个目的，告诉gradle不要检查远程仓库，使用本地仓库中的，如果本地仓库依赖没有，就会构建失败
+
+#### Troubleshooting dependency problems
+
+#### Responding to version conflicts
+
+> gradle不会自动告诉你，你的项目有冲突了，经常查看依赖报告不是一个好的解决方案，修改默认策略，让遇到冲突时失败，  查看下面代码
+
+	configurations.cargo.resolutionStrategy {
+		failOnVersionConflict()
+	}
+
+>失败对于调试很有帮助，特别是设置项目早期和修改依赖设置，运行项目的任何u任务都会发生版本冲突， 
+
+#### Enforcing a specific version
+
+> 你管理项目越多，你就越需要使用标准化的构建环境，你想共享通用的任务并指定一个制定的版本库，例如你想统一你的web项目使用cargo 1.3.0部署，尽管依赖声明需要不同版本
+> 使用gradle很简单的实现这个企业策略，让你可以强制指定一个顶级依赖和传递性依赖,
+> 下面代码演示了如何为cargo重新配置默认解析策略强制使用1.3.0版本
+
+	configurations.cargo.resolutionStrategy {
+		force 'org.codehaus.cargo:cargo-ant:1.3.0'
+	}
+
+> 现在你运行依赖测试报告，看到结果如下
+	org.codehaus.cargo:cargo-ant:1.3.1 -> 1.3.0
+	
+#### Using the dependency insight report
+
+> 配置解析策略的改变，如前所示，最好的地方时初始脚本中，可以全局级别强制实施， 构建用户或许不知道为什么实际运行的cargo ant任务被使用， 唯一的方式就是查看依赖报告观察
+> 不同，有时你想知道为什么强制使用某个版本
+
+> gradle提供了不同的报告类型，依赖观察报告，解释了一个依赖在图中如何和为什么， 运行这个报告，需要提供两个参数，配置名，默认是编译配置，依赖本身， 如下代码展示，
+	
+	gradle -q dependencyInsight --configuration cargo --dependency xml-apis:xml-apis
+
+
+> 依赖报告从配置的顶层开始解析，观察报告展示依赖图从实际使用的依赖配置开始，如下图各种类型依赖
+	
+![](b16.png)
+
+
+
+#### Refreshing the cache
+
+> 为了避免为了某个库一遍又一遍的访问仓库，gradle提供了特定的缓存策略，这种策略用于一个依赖的快照版本和使用动态依赖模板的依赖,你可以手动刷新缓存中的依赖，通过
+> 命令选项，--refresh-dependencies,这个标记强制检查配置仓库中的工件是否发生变化，如果发生变化，依赖将再被下载，替换缓存中的类库，你可以配置一个构建缓存的默认行为
+> 你可以配置缓存动态依赖版本0秒超时
+	
+	configurations.cargo.resolutionStrategy {
+		cacheDynamicVersionsFor 0, 'seconds'
+	}
+
+> 你或许有好的原因不想缓存snapshot版本， 下面配置；
+	
+	configurations.compile.resolutionStrategy {
+		cacheChangingModulesFor 0, 'seconds'
+		}
