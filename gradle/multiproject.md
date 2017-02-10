@@ -117,3 +117,86 @@
 > 上图中，比较了两种不同的todo应用结构，一个是层级结构，一个是平铺结构， 没有把build和setting文件放在根目录，
 > 而是放在一个叫做master的目录里，和其他项目目录挨着，使用master目录，可以从子目录执行构建，可以再setting文件
 > 中使用includeFloat方法
+
+#### Configuring subprojects
+
+> 以下是真实项目的多项目构建需求
+> 根项目和所有子项目，应该有一样的group和version属性值
+> 所有子项目都是java项目，都需要java插件保证功能正确，所以你需要对子项目应用插件，不需要对根项目应用
+> web项目是唯一一个需要声明外部依赖的项目，这个项目类型，这个项目类型来自于其他子项目，被构建成一个war文件，而不是jar文件
+> 使用jetty插件运行这个程序
+> 子项目之间建模依赖关系
+
+#### Understanding the Project API representation
+
+> 多项目构建的新方法，如下图
+！[](b25.png)
+
+> 为了声明特定的项目构建代码， project方法被使用，至少必须提供项目路径
+> 很多时候你发现你想为你的所有项目或所有子项目定义通用行为，对于这种情况，project api提供了一个特殊的方法： allprojects和
+> subprojects.假设你想把java插件用于所有子项目 可以通过subprojects闭包参数来实现
+
+> 在多项目构建里计算顺序是基于字母名称顺序,为了显示的控制计算顺序
+> ，你可以使用evaluationDependsOn和evalutationDependsOnChildren,尤其确保一个项目的属性设置后，再被其他项目使用
+
+#### Defining specific behavior
+
+> 特定项目行为通过project方法定义，为了给三个子项目设置构建基础，你需要为他们都配置项目配置块，在你的build.gradle文件里
+	
+	ext.projectIds = ['group': 'com.manning.gia', 'version': '0.1']
+	
+	group = projectIds.group
+	version = projectIds.version
+	
+	project(':model') {
+		group = projectIds.group
+		version = projectIds.version
+		apply plugin: 'java'
+	}
+
+	project(':repository') {
+		group = projectIds.group
+		version = projectIds.version
+		apply plugin: 'java'
+	}
+	
+	
+	project(':web') {
+		group = projectIds.group
+		version = projectIds.version
+		apply plugin: 'java'
+		apply plugin: 'war'
+		apply plugin: 'jetty'
+		repositories {
+			mavenCentral()
+		}
+		dependencies {
+			providedCompile 'javax.servlet:servlet-api:2.5'
+		runtime 'javax.servlet:jstl:1.1.2'
+		}
+	}
+
+> 这个方案并不完美，有很多代码重复。java 插件重复用于与每个子项目。
+
+##### Property inheritance
+
+> 在项目里定义的属性被子项目自动继承， 这种概念也被其他构建工具使用例如maven,上面例子定义的prjectIds也可用于model,
+> repository,web子项目
+
+> 在多项目构建的根目录上下文中，你可以执行单个子项目， 你需要做的就是链接项目路径名称和任务名,路径用冒号表示 ,例如构建model
+> 这个子项目，在命令行使用完整路径
+
+	$ gradle :model:build
+	:model:compileJava
+	:model:processResources UP-TO-DATE
+	:model:classes
+	:model:jar
+	:model:assemble
+	:model:compileTestJava UP-TO-DATE
+	:model:processTestResources UP-TO-DATE
+	:model:testClasses UP-TO-DATE
+	:model:test
+	:model:check
+	:model:build
+	
+	
