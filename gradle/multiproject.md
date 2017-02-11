@@ -200,3 +200,68 @@
 	:model:build
 	
 	
+#### Declaring project dependencies
+
+> 声明依赖另一个项目类似声明依赖一个外部库，两者有需要在dependencies配置块中声明，
+
+	project(':model') {
+		...  // model项目没有依赖
+	}
+	
+	project(':repository') {
+		dependencies {
+			compile project(':model') //声明编译时依赖model项目
+		}
+	}
+
+	project(':web') {
+		dependencies {
+			compile project(':repository')
+			providedCompile 'javax.servlet:servlet-api:2.5'
+			runtime 'javax.servlet:jstl:1.1.2'
+		}
+	}
+
+> 子项目repository依赖子项目model，子项目web依赖repository项目，这三个些依赖有重要含义：
+	
+> 项目依赖的实际依赖是它创建的库，在这个项目里，依赖的Model子项目jar文件,这就是为啥项目依赖也叫库依赖
+> 被依赖的项目，也将加入他的传递性依赖到class_path里， 这意味着外部依赖和项目依赖都一样，
+> 在构建生命周期的初始化阶段，gradle确定了执行顺序，依赖于一个子项目，意味着子项目要先被构建， 构建后使用依赖
+
+> 在初始化阶段后，gradle存储了一个内部的依赖模型，他知道，web依赖repository，repository依赖model，你不需要从
+> 一个特定的子项目执行task，就可以构建的所有项目执行task， 假设你想执行task build 从跟项目开始， 事实上
+> gradle知道子项目的执行顺序。
+
+> 从根项目开始执行可以节省时间，gradle支持增量构建，
+
+#### Partial multiproject builds
+
+> 复杂的多项目构建有几十个甚至上百个子项目依赖，会影响平均执行时间，grdle遍历所有子项目，确保他们是最新的。通常
+> 你知道那些子项目源文件改变了，从技术上来讲，你不需要重新构建没有改变的子项目,对于这种情况，gradle提供了一个
+> 特性叫partial builds，可以通过命令行参数 -a 或者 --no-rebuild参数启用，假设你只改变了代码，在子项目
+> repository里的代码，你不需要重新构建Model子项目， 通过使用partial builds，你可以节省检查model项目
+> 的时间， 降低构建时间，
+
+	gradle :repository:build -a
+
+> --no-rebuild选项在你只改变文件在单独的项目里很有用， 作为日常开发实践一部分，你想从代码仓库获取最新源码
+> 为了确保代码不会出现异常， 你想重新构建和测试你当前项目的依赖，常规的build任务，仅仅编译依赖的项目组装成jar
+> 可以执行 buildNeeded 任务，
+
+	gradle :repository:buildNeeded
+
+> 你的项目的任何改变，都会导致依赖它的项目产生副作用，使用 buildDependents的帮助，通过构建和测试依赖项目验证
+> 代码变化产生的影响
+
+	gradle :repository:buildDependents
+
+
+##### Declaring cross-project task dependencies
+
+> 在前面，你看到执行一个特殊的task在根项目里，将调用左右子项目的同名任务， 对于build任务的执行顺序，通过
+> 编译时项目依赖来明确， 如果你项目没有任何依赖，或者自己定义了和根项目还有子项目有同样名字的任务，那么情况
+>就不一样了
+
+##### DEFAULT TASK EXECUTION ORDER
+
+> 假设你定义了一个
