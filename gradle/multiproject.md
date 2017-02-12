@@ -264,4 +264,180 @@
 
 ##### DEFAULT TASK EXECUTION ORDER
 
-> 假设你定义了一个
+> 假设你定义了一个叫做hello的任务，在root项目下，同时也在子项目里定义了同名，如下
+	
+	task hello << {
+		println 'Hello from root project'
+	}
+	
+	project(':model') {
+		task hello << {
+			println 'Hello from model project'
+		}
+	}
+
+
+	project(':repository') {
+		task hello << {
+			println 'Hello from repository project'
+		}
+	}
+
+> 如果你在根项目下运行这个任务，如下输出
+	
+	$ gradle hello
+	:hello
+	Hello from root project
+	:model:hello
+	Hello from model project
+	:repository:hello
+	Hello from repository project
+
+> 任务之间没有依赖关系，gralde执行顺序是这样，root级别的任务最先执行， 对于子项目里的任务执行顺序，按照字母顺序狮子那个，model在repository前面， 在settings文件里的声明顺序
+> 不影响执行顺序
+
+##### CONTROLLING THE TASK EXECUTION ORDER
+
+> 你可以通过一个跨项目任务依赖决定任务执行顺序。你需要引用不同项目中的task路径
+
+	task hello << {
+		println 'Hello from root project'
+	}
+	project(':model') {
+		task hello(dependsOn: ':repository:hello') << {
+			println 'Hello from model project'
+		}
+	}
+	project(':repository') {
+		task hello << {
+			println 'Hello from repository project'
+		}
+	}
+	
+> 如上所致，如果你执行hello任务，打印顺序如下
+	
+	$ gradle hello
+	:hello
+	Hello from root project
+	:repository:hello
+	Hello from repository project
+	:model:hello
+	Hello from model project	
+
+> 控制执行顺序在跨不同项目任务之间不受到名称限制，通过使用相同的机制来控制具有不同名称的task执行顺序，你需要做的就是引用完整任务路径
+
+#### Defining common behavior
+
+> 在前面提到。你需要将java plugin插件在每个子项目里配置，你也创建了一个外部属性projectIds来定义gorup和version， 你使用外部属性的值，赋值给根项目和子项目属性
+> 在小项目里这似乎不是什么问题，但是有几十子项目的大项目里就非常无趣了
+> 我们引入 allprojects和subprojects方法改进，
+
+![](b26.png)
+
+> 对你的项目这意味着什么呢？你使用allprojects方法用于设置group和version给root项目和子项目， 因为root没有任何java代码，不需要使用java plugin，
+> 只有子项目需要java plugin 你可以使用subprojects方法给子项目设置 下面展示了
+	
+	allprojects {
+		group = 'com.manning.gia'
+		version = '0.1'
+	}
+	subprojects {
+		apply plugin: 'java'
+	}
+	project(':repository') {
+		dependencies {
+			compile project(':model')
+		}
+	}
+	project(':web') {
+		apply plugin: 'war'
+		apply plugin: 'jetty'
+		repositories {
+			mavenCentral()
+		}
+		dependencies {
+			compile project(':repository')
+			providedCompile 'javax.servlet:servlet-api:2.5'
+			runtime 'javax.servlet:jstl:1.1.2'
+		}
+	}
+
+#### Individual project files
+
+> 目前的多项目构建，你仅仅定义了build.gradle和settings.gradle文件，你加入新的子项目和任务到你的build.gradle文件里，代码管理变得复杂，
+> 你可以为每个项目单独创建build.gradle，分离关注点
+
+#### Creating build files per project
+
+> 对于每个子项目，需要创建一个默认的约定命名构建文件。如下
+	
+！[](b27.png)
+
+#### Defining the root project’s build code
+
+> 出去了子项目代码，根项目的代码看起来十分简单，只需要保留allprojects和subprojects配置块
+	
+	allprojects {
+		group = 'com.manning.gia'
+		version = '0.1'
+	}
+	subprojects {
+		apply plugin: 'java'
+	}
+
+
+#### Defining the subprojects’ build code
+
+> 记得model子项目没有定义任何构建逻辑，实际上，你也不需要声明一个项目配置块，  你不需要在子项目build.gradle里声明任何代码，gradle知道他是多项目构建的一部分，因为
+> settings文件里已经包含了它的声明
+
+> 对于子项目repository和web没有引入任何新代码， 你只需要拷贝存在的项目project 块到合适的地方， 每个子项目有专用的gradle文件，将配置放到代码块里是可选的，
+	
+	//repository项目
+	dependencies {
+		compile project(':model')
+	}
+
+    // web项目
+	apply plugin: 'war'
+	apply plugin: 'jetty'
+	repositories {
+		mavenCentral()
+	}
+	dependencies {
+		compile project(':repository')
+		providedCompile 'javax.servlet:servlet-api:2.5'
+		runtime 'javax.servlet:jstl:1.1.2'
+	}
+
+
+#### Customizing projects
+
+> 标准的gradle构建文件名字是build.gradle。 在多项目构建里，你想用一个可读性更好的名字命名你的构建文件， 当你使用ide时，同时编辑多个build文件，在他们之间交替变得很困难
+> 假设你想构建的项目结构如下，每个子项目目录命名有todo-前缀， 和一个富有含义的名字，例如 repository项目被叫做，todo-repository.build文件名表现实际项目职责，具体如下
+	
+	
+	build.gradle
+	settings.gradle
+	todo-model
+		├── model.gradle
+		└── src
+		└── ...
+	todo-repository
+		├── repository.gradle
+		└── src
+		└── ...
+	todo-web
+		├── src
+		│
+		└── ...
+		└── web.gradle
+
+> 使得这个项目工作关键是setting文件，它提供了更多功能，不仅仅是告诉你的构建要包括哪些子项目， 事实上它本身是一个构建脚本，在构建生命周期的解析阶段执行， 
+> 下面是settings.file中自定义脚本名称代码
+	
+	include 'todo-model', 'todo-repository', 'todo-web'
+	rootProject.name = 'todo'
+	rootProject.children.each {
+		it.buildFileName = it.name + '.gradle' - 'todo-'
+	}
