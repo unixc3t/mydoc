@@ -146,3 +146,56 @@
 	
 	re.names
 	["go","to"]
+
+> 选择判断分支
+	
+	str = "FoO"
+	reg = /([A-Z]?)[a-z](?(1)[A-Z]|[a-z])/ # 如果开头字母是大写，那么捕获到了，第三个应该是大写，否则就是小写字母
+
+	reg.match(str) #<MatchData "FoO",1:"F">
+
+> 锚点
+	
+![](p8.png)
+	
+	str = "123467"
+	str1 = "123 467"
+	str2 = "123  abc 467"
+	re = /^\d+$/
+	re.match str #<MatchData "123467">
+	re.match str1 #nil
+	re.match str2 #nil
+
+
+	str = "hello world"
+	re = /\bhello\b/
+	re.match str #<MatchData "hello">
+
+> 环视
+
+![](p9.png)
+
+> 下面示例是匹配一个位置
+	str = "hello world"
+	re = /(?=world)/ #表示从左往右匹配，找到右边有一个world的位置,注意这里是找到位置
+	
+	re = ~ str #6 从0开始数，第六个位置右侧有world
+	
+
+>下面示例表示匹配一个位置，从这个位置起匹配一些字符
+	str = "hello world"
+	re = /(?=world)\w+/ #表示从左往右匹配，找到右边有一个world的位置,然后从这个位置开始匹配
+	re.match str #<MatchData "world">
+	
+
+	str = "1000000"
+	re = /(?<=\d)/ #逆向环视，找到一个位置从右往左(理解成从右往左扭头看,头是从右开始向左扭过去)看应该有一个数字
+	str.sub(re,",") #"1,000000",找到这个位置替换成，
+	str.gsub(re,",") #"1,0,0,0,0,0,0,",全局插入，找到这个位置替换成，
+
+	#下面正则表示 从右往左看，有一个数字，从左往右看有3个数字一组，最后一组末尾不是数字，找到这个位置，
+	re= /(?<=\d)(?=(\d\d\d)+(?!\d))/
+	str.gsub(re,',')
+
+	str = "11110000000000"
+	str.gsub(re,',') # "11,110,000,000,000"
