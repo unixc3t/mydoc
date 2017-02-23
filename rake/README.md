@@ -3,4 +3,5 @@
 * [work_with_rules](work_with_rules.md)
 * [cleaning_up_a_build](cleaning_up_a_build.md)
 * [parallel](parallel.md)
+* [debug](debug_rake.md)
 
