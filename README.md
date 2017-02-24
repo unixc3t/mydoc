@@ -8,4 +8,4 @@
   * [java文档](java/README.md)
   * [css文档](css/README.md)
   * [openresty文档](openresty/README.md)
-  * [regular文档](rugular/README.md)
+  * [regular文档](regular/README.md)

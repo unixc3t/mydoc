@@ -4,4 +4,5 @@
 * [cleaning_up_a_build](cleaning_up_a_build.md)
 * [parallel](parallel.md)
 * [debug](debug_rake.md)
+* [integration_rails](integration_rails.md)
 
