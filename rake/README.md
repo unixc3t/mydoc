@@ -6,4 +6,4 @@
 * [debug](debug_rake.md)
 * [integration_rails](integration_rails.md)
 * [test_rake](test_rake.md)
-*[Avdi Grimm's rake series](Avdi_Grimm_series)
+* [Avdi Grimm's rake series](Avdi_Grimm_series)
