@@ -123,3 +123,77 @@
     # >> ch2.md
     # >> subdir/appendix.md
     # >> ch4.markdown
+
+> temp文件被过滤掉了，最后剩下我们关心的文件
+
+> 下一步我们更新代码，让文件列表更完整， 我们将下标操作符变成FileList.new 传递一个代码块给构造函数， FileList根据代码块产生列表，将所有排除代码放在代码块里
+	
+	require 'rake'
+	Dir.chdir "project"
+	files = Rake::FileList.new("**/*.md", "**/*.markdown") do |fl|
+		fl.exclude("~*")
+		fl.exclude(/^scratch\//)
+		fl.exclude do |f|
+		`git ls-files #{f}`.empty?
+		end
+	end
+	puts files 
+
+    # >> ch1.md
+    # >> ch3.md
+    # >> ch2.md
+    # >> subdir/appendix.md
+    # >> ch4.markdown
+
+> 在我们回到Rakefile文件之前还需要做一个改变，在Rakefile里，我们需要一个被构建的文件列表，不是源文件，是与之对应的构建文件， 将输入文件转换成输出的文件，我们使用
+> #ext方法，我们给它一个.html扩展名，返回一个新的文件列表，将原来的md文件扩展名替换成.html
+
+	require 'rake'
+	Dir.chdir "project"
+	files = Rake::FileList.new("**/*.md", "**/*.markdown") do |fl|
+		fl.exclude("~*")
+		fl.exclude(/^scratch\//)
+		fl.exclude do |f|
+			`git ls-files #{f}`.empty?
+		end
+	end
+	puts files.ext(".html")
+
+    # >> ch1.html
+    # >> ch3.html
+    # >> ch2.html
+    # >> subdir/appendix.html
+    # >> ch4.html
+
+> 现在我们回到Rakefile文件，我们替换我们原来的硬编码文件列表，
+
+>因为我们现在需要支持markdown文件的.md或.markdown扩展名， 我们不得不做一点改变告诉rake构建他们其中一种为Html,
+> 现在我们就简单的重复一个rule.后面我们再改进
+	
+	source_files = Rake::FileList.new("**/*.md", "**/*.markdown") do |fl|
+		fl.exclude("~*")
+		fl.exclude(/^scratch\//)
+		fl.exclude do |f|
+			`git ls-files #{f}`.empty?
+		end
+			end
+
+	task :default => :html
+	task :html => source_files.ext(".html")
+
+	rule ".html" => ".md" do |t|
+		sh "pandoc -o #{t.name} #{t.source}"
+	end
+
+	rule ".html" => ".markdown" do |t|
+		sh "pandoc -o #{t.name} #{t.source}"
+	end
+
+> 现在我们运行rake,编译所有文件到html
+	
+	$ rake
+	pandoc -o ch1.html ch1.md
+	pandoc -o ch2.html ch2.md
+	pandoc -o ch3.html ch3.md
+	pandoc -o subdir/appendix.html subdir/appendix.md
+	pandoc -o ch4.html ch4.markdown
