@@ -5,7 +5,7 @@
 
 > 如果你也想显示没有描述的任务加上-A
 
-	$ rake -TA
+	$ rake -AT
 
 #### 定义全局Rakefile
 
