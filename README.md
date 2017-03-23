@@ -10,3 +10,4 @@
   * [openresty文档](openresty/README.md)
   * [regular文档](regular/README.md)
   * [git文档](git/README.md)
+  * [slim文档](slim/basic.md)
