@@ -51,14 +51,14 @@
 
 > 看下面例子
 
-  body
-  p
-    | 
-      This line is on the left margin.
-      This is a test of the text block.
-      This is a test of the text block.
-      This is a test of the text block.
-      This is a test of the text block.
+    body
+    p
+      | 
+        This line is on the left margin.
+        This is a test of the text block.
+        This is a test of the text block.
+        This is a test of the text block.
+        This is a test of the text block.
 
 > 被编译成
     <body><p>This is a test of the text block.
