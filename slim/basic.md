@@ -61,6 +61,7 @@
         This is a test of the text block.
 
 > 被编译成
+
     <body><p>This is a test of the text block.
       This is a test of the text block.
       This is a test of the text block.
@@ -69,6 +70,7 @@
 > 如果管道符号与文本在同一行 , 文本左边与管道符号有一个空格 . 后面任何额外的空格将被复制.
 
 > 例子1 在一行,|管道符号后面有空格,ccck前面空格被保留
+
     body
       p
         |              ccck       aat         ch
