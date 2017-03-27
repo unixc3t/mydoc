@@ -215,6 +215,65 @@
       json.(comment , :id, :name, :content)
     end
 
+> 动态定义属性名称,使用set!方法
+
+    json.set! :author do
+      json.set! :name, 'David'
+    end
+
+    # => {"author": { "name": "David" }}
+
+> 顶层数组可以直接处理
+
+    # @comments = @post.comments
+
+    json.array! @comments do |comment|
+      next if comment.marked_as_spam_by?(current_user)
+
+      json.body comment.body
+      json.author do
+        json.first_name comment.author.first_name
+        json.last_name comment.author.last_name
+      end
+    end
+
+    # => [ { "body": "great post...", "author": { "first_name": "Joe", "last_name": "Bloe" }} ]
+  
+> 直接从数组抽取属性
+
+    # @people = People.all
+
+    json.array! @people, :id, :name
+
+    # => [ { "id": 1, "name": "David" }, { "id": 2, "name": "Jamie" } ]
+  
+> jbuilder对象可以直接用在互相嵌套中，用于对象构造
+
+    class Person
+      # ... Class Definition ... #
+      def to_builder
+        Jbuilder.new do |person|
+          person.(self, :name, :age)
+        end
+      end
+    end
+
+    class Company
+      # ... Class Definition ... #
+      def to_builder
+        Jbuilder.new do |company|
+          company.name name
+          company.president president.to_builder
+        end
+      end
+    end
+
+    company = Company.new('Doodle Corp', Person.new('John Stobs', 58))
+    company.to_builder.target!
+
+    # => {"name":"Doodle Corp","president":{"name":"John Stobs","age":58}}
+
+
 #### Partials
 
 > 如果我们在comment块里有很多细节操作，又在很多地方重复使用，我们可以使用partial, 使用方式类似视图的模板的partials，
@@ -230,3 +289,138 @@
 
     /app/views/comments/_comment.json.jbuilder
     json.(comment, :id, :name, :content)
+
+> 下面是渲染views/comments/_comments.json.jbuilder ，设置一个本地变量comments 
+
+    json.partial! 'comments/comments', comments: @message.comments
+
+> 也可以渲染集合partials
+
+  /views/articles/show.json.jbuilder
+  json.array! @article.comments, partial: 'comments/comments', as: :coo
+
+>或者 
+  json.partial! 'comments/comments', collection: @article.comments, as: :coo
+
+> 或者
+
+  json.partial! partial: 'comments/comments', collection: @article.comments, as: :coo
+
+>  或者
+    
+   json.comments @article.comments, partial: 'comments/comments', as: :coo
+
+> 下面是partial
+
+  views/comments/_comments.json.jbuilder
+  json.(coo, :id, :name)
+
+
+> 结果
+  [
+    {
+    "id": 1,
+    "name": "jack"
+    },
+    {
+    "id": 2,
+    "name": "peter"
+    },
+    {
+    "id": 3,
+    "name": "nika"
+    }
+  ]
+
+> 你也可以传递任何对象给partial，使用或者不适用 :locals
+
+    /views/articles/show.json.jbilder
+    json.partial! 'comments/comments', locals: {coo: @article.comments}
+    # or
+    json.partial! 'comments/comments', coo: @articles.comments
+
+
+> partial
+    /views/comments/_comments.json.jbuilder
+    json.comments coo, :id, :name
+
+> 结果
+
+    {
+      "comments": [
+        {
+          "id": 1,
+          "name": "jack"
+        },
+        {
+          "id": 2,
+          "name": "peter"
+        },
+        {
+          "id": 3,
+          "name": "nika"
+        }
+      ]
+      }
+
+> 你也可以明确的 让jbuilder对象返回null
+
+    class Article < ActiveRecord::Base
+      has_many :comments
+      belongs_to :author
+
+      def anonymous?
+        self.author.nil?
+      end
+    end
+
+
+    json.author do
+      if @article.anonymous?
+        json.null! # or json.nil!
+      else
+        json.first_name @article.author.id
+        json.last_name @article.name
+      end
+    end
+
+
+> 输出
+
+    {
+      "id": 1,
+      "name": "java",
+      "content": "hello java content",
+      "published_at": "2017-03-26T09:37:32.573Z",
+       "author": {
+          "first_name": 1,
+          "last_name": "java"
+       }
+    }
+
+> 使用ignore_nil！方法防止返回null
+
+    json.ignore_nil!
+    json.foo nil
+    json.bar "bar"
+    # => { "bar": "bar" }
+
+> 片段缓存，类似缓存html模板
+
+    json.cache! ['v1', @person], expires_in: 10.minutes do
+      json.extract! @person, :name, :age
+    end
+
+
+> 使用 cache_if! 进行条件缓存
+
+    json.cache_if! !admin?, ['v1', @person], expires_in: 10.minutes do
+      json.extract! @person, :name, :age
+    end
+
+> 如果渲染对象集合片段，可以看一下 jbuilder_cache_multi
+
+> 加快jbuilder 渲染，可以使用配置其他json生成器，例如 yajl 
+
+    require 'multi_json'
+    MultiJson.use :yajl
