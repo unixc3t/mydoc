@@ -216,3 +216,218 @@
     post = build(:post)
     post.new_record?        # => true
     post.author.new_record? # => true
+
+> 请注意 strategy: :build 选项必须明确传递给association，不能在隐式情况下使用
+
+    factory :post do
+    # ...
+    author strategy: :build    # <<< this does *not* work; causes author_id to be nil
+
+> 生成has_many关系数据更复杂一点,基于灵活性的需求，这有一个不会失败的案例生成关联数据
+
+    FactoryGirl.define do
+
+      # post factory 有一个关联user的 belongs_to关联 
+      factory :post do
+        title "Through the Looking Glass"
+        user
+      end
+
+      # user factory 没有关联 posts
+      factory :user do
+        name "John Doe"
+
+        # user被created后，user_with_posts将创建post数据
+        factory :user_with_posts do 
+          # posts_count是一个临时对象,在factory上可用，可以通过evaluator在回调中使用
+          transient do
+            posts_count 5
+          end
+
+          # after(:create)后面传递了2个值，user实例和evaluator,存储了来自factory的所有值
+          # 和临时属性, create_list的第二个参数是创建记录的数量,我们确保user是post的关联属性
+          after(:create) do |user, evaluator|
+            create_list(:post, evaluator.posts_count, user: user)
+          end
+        end
+      end
+    end
+
+> 下面我们可以这么写
+
+    create(:user).posts.length # 0
+    create(:user_with_posts).posts.length # 5
+    create(:user_with_posts, posts_count: 15).posts.length # 15
+  
+> 生成has_and_belongs_many 关联关系类似上面的has_many，但是有一点不一样，你需要传递一组对象给模型的复数属性名
+> 而不是单个对象属性名版本，看下面例子
+
+    FactoryGirl.define do
+
+      # language factory 有一个profile的belongs_to关联
+      factory :language do
+        title "Through the Looking Glass"
+        profile
+      end
+
+      # profile factory 没有languages关联
+      factory :profile do
+        name "John Doe"
+
+        # profile_with_languages 将创建language数据,在profile create后
+        factory :profile_with_languages do
+          transient do
+            languages_count 5
+          end
+
+          after(:create) do |profile, evaluator|
+            create_list(:language, evaluator.languages_count, profiles: [profile])
+          end
+        end
+      end
+    end
+  
+> 然后我们就可以这么做
+
+    create(:profile).languages.length # 0
+    create(:profile_with_languages).languages.length # 5
+    create(:profile_with_languages, languages_count: 15).languages.length # 15
+
+#### Sequences
+
+> 生成唯一值可以使用sequences， Sequences通过调用sequence定义一个代码块，使用时通过调用generate
+
+    # Defines a new sequence
+    FactoryGirl.define do
+      sequence :email do |n|
+        "person#{n}@example.com"
+      end
+    end
+
+    generate :email
+    # => "person1@example.com"
+
+    generate :email
+    # => "person2@example.com"
+
+> sequences可以在动态属性上使用
+
+    factory :invite do
+      invitee { generate(:email) }
+    end
+
+> 隐式使用
+
+    factory :user do
+      email # Same as `email { generate(:email) }`
+    end
+
+> 也可以定义一个内嵌的 sequence 仅仅用于特定的factory中
+
+    factory :user do
+      sequence(:email) { |n| "person#{n}@example.com" }
+    end
+
+> 可以复写初始值
+
+    factory :user do
+      sequence(:email, 1000) { |n| "person#{n}@example.com" }
+    end
+
+> 没有给定一个代码块，将以初始值自动增加
+
+    factory :post do
+      sequence(:position)
+    end
+
+> sequences可以有别名，别名间共享计数器
+
+    factory :user do
+      sequence(:email, 1000, aliases: [:sender, :receiver]) { |n| "person#{n}@example.com" }
+    end
+
+    # 使用email时计数器增加后的值也会分享给 :sender和:receiver
+    generate(:sender)
+  
+> 使用别名，计数器默认值为1
+
+    factory :user do
+      sequence(:email, aliases: [:sender, :receiver]) { |n| "person#{n}@example.com" }
+    end
+
+> 设置默认值
+
+    factory :user do
+      sequence(:email, 'a', aliases: [:sender, :receiver]) { |n| "person#{n}@example.com" }
+    end
+
+> 设置的值需要支持#next方法， 例如"a"之后是'b','c'
+
+#### Traits
+
+> traits允许你定义一组属性，然后用于任何factory
+
+    factory :user, aliases: [:author]
+
+    factory :story do
+      title "My awesome story"
+      author
+
+      trait :published do
+        published true
+      end
+
+      trait :unpublished do
+        published false
+      end
+
+      trait :week_long_publishing do
+        start_at { 1.week.ago }
+        end_at   { Time.now }
+      end
+
+      trait :month_long_publishing do
+        start_at { 1.month.ago }
+        end_at   { Time.now }
+      end
+
+      factory :week_long_published_story,    traits: [:published, :week_long_publishing]
+      factory :month_long_published_story,   traits: [:published, :month_long_publishing]
+      factory :week_long_unpublished_story,  traits: [:unpublished, :week_long_publishing]
+      factory :month_long_unpublished_story, traits: [:unpublished, :month_long_publishing]
+    end
+
+> traits可以作为属性
+
+    factory :week_long_published_story_with_title, parent: :story do
+      published
+      week_long_publishing
+      title { "Publishing that was started at #{start_at}" }
+    end
+
+> traits可以定义一样的属性，也不会跑出AttributeDefinitionErrors; trait定义的属性越靠后，被使用的优先级越高
+
+    factory :user do
+      name "Friendly User"
+      login { name }
+
+      trait :male do
+        name   "John Doe"
+        gender "Male"
+        login { "#{name} (M)" }
+      end
+
+      trait :female do
+        name   "Jane Doe"
+        gender "Female"
+        login { "#{name} (F)" }
+      end
+
+      trait :admin do
+        admin true
+        login { "admin-#{name}" }
+      end
+
+      factory :male_admin,   traits: [:male, :admin]   # login will be "admin-John Doe"
+      factory :female_admin, traits: [:admin, :female] # login will be "Jane Doe (F)"
+    end
