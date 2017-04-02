@@ -11,4 +11,5 @@
   * [regular文档](regular/README.md)
   * [git文档](git/README.md)
   * [slim文档](slim/basic.md)
-  * [rails_doc](rails_doc/basic.md)
+  * [rails_doc](rails_doc/README.md)
+  * [the rspec book](rspecbook/README.md)
