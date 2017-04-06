@@ -188,10 +188,12 @@
 
 > 你能够是在那个一个不同的factory或者覆盖属性值
 
-  factory :post do
-    # ...
-    association :author, factory: :user, last_name: "Writely"
-  end
+    factory :post do
+
+      # ...
+
+      association :author, factory: :user, last_name: "Writely"
+    end
 
 > 关联方法的行为变化依赖于对父对象使用的构建策略
 
