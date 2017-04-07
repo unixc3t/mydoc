@@ -495,8 +495,7 @@
 
 #### 13.8 Subjectivity
 
-> 一个example中的subject就是被描述的对象,在RspecUser example中，这个subject就是 RspecUser实例 在before块中
-> 初始化。
+> 一个example中的subject就是被描述的对象,在RspecUser example中，这个subject就是 RspecUser实例 在before块中初始化。
 > rspec允许一个备选方案：设置一个实例变量，在before block中，像上面这样， 在 subject（）方法的形式  你也可以使用这个方法在不同的方式，
 
 ##### Explicit Subject
