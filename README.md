@@ -12,4 +12,5 @@
   * [git文档](git/README.md)
   * [slim文档](slim/basic.md)
   * [gems_doc](gems_doc/README.md)
+  * [rails_doc](rails_doc/README.md)
   * [the rspec book](rspecbook/README.md)
