@@ -14,3 +14,4 @@
   * [gems_doc](gems_doc/README.md)
   * [rails_doc](rails_doc/README.md)
   * [the rspec book](rspecbook/README.md)
+  * [jquery](jquery/README.md)
