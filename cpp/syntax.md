@@ -6,6 +6,10 @@
 
 > 如果编译器认为main函数末尾没有返回语句,默认以 return 0;返回 但是这一点只适用于main函数不适用其他函数
 
+> c++ 特有的初始化,c语言没有
+
+    int wrens(432);
+
 > c++11初始化可以使用大括号.这种方式多数用于数组和结构,但是也可以用于变量,变量使用这种方式时可以使用等号或者不适用等号
 
     int umus{7};
@@ -27,6 +31,20 @@
 > char16_t和char32_t
 
 >char16_t无符号 长16位,char32_t无符号长32位,使用前缀u表示char16_t,例如 u'C'和u"be good",使用U表示char32_t,例如U'R'和U"dirtyrat"
+
+> 常量声明
+
+   const type name = value;
+
+> 强制转换,不会改变变量本身，而是创造新的变量
+
+    （typeName）value
+     typeName (value)
+
+> auto 让变量根据初始值确定类型
+
+    auto n = 100;
+    auto x = 1.5;
 
 > 数组初始化规则
 
@@ -61,6 +79,18 @@
 
     char birds[11] = "Mr. Cheeps";
 	char fish[] = "Bubbles";
+
+> getline()丢弃换行符，get()保留换行符在列队
+> getine()函数读取整行，使用回车键的换行符来确定输入结尾, cin.getline(),两个参数一个是存储出入的数组，
+> 另一个是读取的字符数， 如果参数为20,自动读取19个，最后一个是空字符,getline()在读取的时候遇到换行符停止
+
+    cin.getlin(name,20)
+
+
+> 不带任何参数的get()读取一个字符
+
+     cin.get(name,20).get()
+
 
 > 字符串 
 > 使用字符串的程序必须 #include <string>并且 使用 std::string来引用它
@@ -106,10 +136,28 @@
 > 可以再默认界定符之间添加任意数量基本字符(+*就是添加的任意基本字符),但空格,左括号,右括号,斜杠和控制字符(如制表符和换行符号)除外
 > 可以将R与 u,U配合使用 例如Ru,RU标识 宽字符
 	
+> 结构体初始化
+
+    struct infl {
+      float v
+    }
+
+    infl duck { 1.12}
+
+> 结构体数组初始化
+
+    infl gu[2] = 
+    {
+      {1.2},
+      {2.3}
+    }
+
 >指针和数字
 
 	int * pt;
 	pt = 0xB8000000; //type mismatch
+
+  nt* p1,p2； //p1是指针，p2是变量类型
 
 >使用强制转换
 
@@ -126,7 +174,7 @@
 
 	int * ps= new int;
 	delete ps; 
->这将释放内存,但不会删除ps指针本身,可以将ps重新指向内存块,delete和new要成对是哟ing,不可重复释放内存
+>这将释放内存,但不会删除ps指针本身,可以将ps重新指向内存块,delete和new要成对,不可重复释放内存
 >只能用delete来a是否能够new分配的内存,空指针使用delete是安全的,一般来说不要使用两个指针指向同一块内存,这将增加错误的删除一个内存块2次
 
 >使用new创建动态数组 
@@ -135,7 +183,7 @@
 	int * psome = new int [10];
 
 >new运算符返回第一个元素地址,被赋给指针psome ,使用delete [] psome来释放内存,方括号表示释放整个数组
->使用new 时使用方括号.使用delete时也要使用方括号
+>使用new 时使用方括号.使用delete时也要使用方括号 delete [] pt
 >总是new和delete使用要遵循一下原则
 >不要使用delete释放不是new分配的内存
 >不要使用delete释放一个内存两次

@@ -1,2 +1,2 @@
 ## Summary
-  * [jquery](jquery/plugin.md)
+  * [jquery](plugin.md)

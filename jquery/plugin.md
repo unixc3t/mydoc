@@ -26,3 +26,17 @@
     $.complex = function(p1,options,p2) {
       var settings = $.extend({v1:value},options||{})
     }
+
+##### 基于包装集的插件
+
+    $.fn.pluginName = function() {
+      //这里面的this等于整个包装集,不用再使用$(this)封装
+      this.each(functin(n){
+        //但是这里面的this是html对象,所以要使用jquery函数需要$(this)
+
+      })；
+      return this;   // 注意基于包装集的函数，一定要支持链式结构 所以一定要返回this
+    }
+
+    //使用时
+    $(xxx).pluginName()
