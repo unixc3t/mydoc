@@ -279,3 +279,57 @@
 
 
 ##### Gutter Position
+
+    Key:	gutter-position
+    Scope:	global, local
+    Options:	before | after | split | inside | inside-static
+    
+
+> 设置 槽的位置，或者是padding或者是margin
+
+> before
+> split  槽作为margin加入到布局元素，不会网格两端不会被移除
+> inside 槽作为padding加入到布局元素，不会网格两端不会被移除
+> after 
+> inside-static
+
+##### lobal Box Sizing [setting]
+
+    Key:	global-box-sizing
+    Scope:	global
+    Options:	border-box | content-box
+    Default:	content-box
+
+>告诉susy 哪种box模式
+
+##### Last Flow setting
+
+    Key:	last-flow
+    Scope:	global
+    Options:	from | to
+    Default:	to
+
+> 一行中最后一个元素流动方向
+
+> from  默认与其他元素一样，在ltr中，from是left，最后一个元素也是left
+> to 与其他元素相反方向
+
+
+##### Debug 【setting】
+
+>  调试布局工作
+
+    key:	debug
+    Scope:	global, local [container only]
+    Options:	<map of sub-settings>
+
+    $susy: (
+      debug: (
+        image: show,
+        color: blue,
+        output: overlay,
+        toggle: top right,
+      ),
+    );
+
+##### Debug Image [setting]
