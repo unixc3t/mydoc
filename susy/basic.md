@@ -287,10 +287,10 @@
 
 > 设置 槽的位置，或者是padding或者是margin
 
-> before
-> split  槽作为margin加入到布局元素，不会网格两端不会被移除
-> inside 槽作为padding加入到布局元素，不会网格两端不会被移除
-> after 
+> before 元素后面加入槽，margin-left
+> split  槽作为margin加入到布局元素，不会网格两端不会被移除 margin-left margin-right
+> inside 槽作为padding加入到布局元素，不会网格两端不会被移除 padding-left padding-right
+> after  元素后面加入槽，margin-right
 > inside-static
 
 ##### lobal Box Sizing [setting]
