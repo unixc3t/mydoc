@@ -233,7 +233,7 @@
 >left 左对齐 margin-left: 0; and margin-right: auto;.
 > center 居中，   left and right margins to auto.
 > right 右对齐 margin-right: 0; and margin-left: auto;.
-> length length 用于左右对s齐
+> length length 用于左右对齐
 
 ##### columns
 
