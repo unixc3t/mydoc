@@ -17,7 +17,7 @@
 
 ## 我们应该包含哪些文件，在使用的时候？
 
-##### javascriptfiles
+##### javascript files
 
 > 位于development-bundle目录下的ui目录,jquery.ui.core.js包含了基本特性。必须inlcude， 其他文件需要就包含。
 
@@ -78,3 +78,29 @@
     <script src="jquery-ui.js"></script>
 
 
+##### effect函数
+
+ > effect 第一个参数表示效果，可以去api查看每种效果属性,相应的属性需要在第二个参数option中设置
+
+ >        第二个参数option用来设置属性
+
+ >        第三个参数表示延时设置
+
+ >        第四个参数表示执行完的效果后的回调方法
+
+> 下面的爆炸效果
+
+![](1.png)
+![](2.png)
+
+>code
+
+     <script>
+        $(function () {
+            $("#jack").on('click',function () {
+                    $("#dd").effect('explode',{
+                        pieces:9
+                    })
+            });
+        });
+    </script>
