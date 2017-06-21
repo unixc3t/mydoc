@@ -61,7 +61,7 @@
         // Note that the previous example will handle only 1 file, if you want that the dialog accepts multiple files, then change the settings:
         // And obviously , loop through the fileNames and read every file manually
         dialog.showOpenDialog({ 
-            properties: [ 
+            properties: [ Create Fil
                 'openFile', 'multiSelections', (fileNames) => {
                     console.log(fileNames);
                 }
