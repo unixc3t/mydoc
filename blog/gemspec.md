@@ -86,3 +86,19 @@
     # if the .gemspec in this git repo doesn't match the version required by this
     # gem's .gemspec, bundler will print an error
     gem "rack", :git => "git://github.com/rack/rack.git"  
+
+> 你不想在.gemspec中引入这个信息(指上面的git=>....信息)，最后在开发的gem 被发布后，这些被删除
+> 这是的整个系统更灵活有弹性，不会基于临时的外部url， 这些信息纯粹用于设置开发环境在开发期间
+
+> 这也是为什么我们推荐人们不要将Gemfile.lock文件放到gem开发环境的版本仓库中，这个文件被bundler激活
+>保障所有依赖，包括依赖的依赖都要一致， 然而，当做某些gem开发时, ，您希望立即知道在整个生态系统中的一些变化是否破坏了您的设置。当你想坚持用一个gem的git location，你不想硬编码你的开发环境设置特殊的gem， 后来发现一个gem
+> released版本，在你运行bunlder install 后发布的，与你的版本不兼容，代码不能运行
+
+
+
+    It's not a way to guarantee that your code works on all versions that you specified in your .gemspec, but the incentive to lock down the exact versions of each gem simply doesn't exist when the users of your code will get it via gem install.
+
+
+#### Update
+
+> 你应该将Gemfile.lock在applications开发中check 而不是gem开发中
