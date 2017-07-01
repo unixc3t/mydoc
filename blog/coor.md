@@ -67,5 +67,89 @@
 
 ##### Rakefile
 
-> Rakefile 提供了基本的运行测试套件的任务,生成文档,生成插件的公开版本，
+> Rakefile 提供了基本的运行测试套件的任务,生成文档,生成插件的release版本，我们可以通过执行
+> rake -T 来得到完整任务列表
 
+    rake build            # Build pdf_renderer-0.1.0.gem into the pkg directory
+    rake clean            # Remove any temporary products
+    rake clobber          # Remove any generated files
+    rake clobber_rdoc     # Remove RDoc HTML files
+    rake install          # Build and install pdf_renderer-0.1.0.gem into system gems
+    rake install:local    # Build and install pdf_renderer-0.1.0.gem into system gems without network access
+    rake rdoc             # Build RDoc HTML files
+    rake release[remote]  # Create tag v0.1.0 and build and push pdf_renderer-0.1.0.gem to Rubygems
+    rake rerdoc           # Rebuild RDoc HTML files
+    rake test             # Run tests
+
+
+##### Booting the Dummy Application
+
+> rails plugin创建了一个虚拟的applictaion在test目录里，这个程序启动过程和使用普通的rails命令创建的一样。
+
+> config/boot文件唯一的责任:配置我们的application的加载路径，config/application.rb文件加载所有需要的依赖和配置application，在config/enviroment.rb初始化配置
+
+
+> rails plugin生成了一个boot文件,test/dummy/config/boot.rb,和appliction的类似，第一个不同是，他需要指向pdf_renderer插件根目录的gemfile，他还明确加入插件的lib目录到ruby的家在路径load path，确保我们的插件在虚拟application中有效：
+
+    # Set up gems listed in the Gemfile.
+    ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../../../Gemfile', __dir__)
+
+    require 'bundler/setup' if File.exist?(ENV['BUNDLE_GEMFILE'])
+    $LOAD_PATH.unshift File.expand_path('../../../lib', __dir__)
+
+> boot文件委托Bundler负责设置依赖和他们的加载路径。test/dummy/config/application.rb只是
+> rails appliction程序中config/application.rb的精简版
+
+    require_relative 'boot'
+
+    require 'rails/all'
+
+    Bundler.require(*Rails.groups)
+    require "pdf_renderer"
+
+    module Dummy
+      class Application < Rails::Application
+        # Initialize configuration defaults for originally generated Rails version.
+        config.load_defaults 5.1
+
+        # Settings in config/environments/* take precedence over those specified here.
+        # Application configuration should go into files in config/initializers
+        # -- all .rb files in that directory are automatically loaded.
+      end
+    end
+
+> config/enviroment.rb和你在普通的rails程序中遇到的一样
+
+    # Load the Rails application.
+    require_relative 'application'
+
+    # Initialize the Rails application.
+    Rails.application.initialize!
+
+#### Running Tests
+
+> 默认情况,rails plugin生成一个完成的测试，为我们的插件，让我们运行一下看看
+
+    raket test
+
+    Run options: --seed 7555
+
+    # Running:
+
+    .
+
+    Finished in 0.002406s, 415.6896 runs/s, 415.6896 assertions/s.
+    1 runs, 1 assertions, 0 failures, 0 errors, 0 skips
+
+
+> 这个测试,定义在test/pdf_renderer_test.rb中，断言我们的插件定义在一个叫做PdfRenderer模块下
+
+    require 'test_helper'
+
+    class PdfRenderer::Test < ActiveSupport::TestCase
+      test "truth" do
+        assert_kind_of Module, PdfRenderer
+      end
+    end
+
+> 最后，注意到我们的测试文件引入了test/test_helper.rb，这个文件负责读取我们的application配置测试环境, 使用我们创建的插件骨架,和一个绿色的测试套件。我们开始编写我们的自定义渲染器
