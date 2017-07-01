@@ -428,7 +428,7 @@
       render_to_body(options)
     end
 
-> 首先 render_to_string()看起来与render()方法类似， 仅有一点不同，render_to_string()没有存储被渲染的模板作为response body， 然而当我们分析整个渲染栈的时候，我们看到一些Action Controller 模块重载了，render()，添加行为，当退出render_to_string()时，
+> 首先 render_to_string()看起来与render()方法类似， 仅有一点不同，render_to_string()没有存储被渲染的模板作为response body， 然而当我们分析整个渲染栈的时候，我们看到一些Action Controller 模块重载了，render()，添加行为，没有对render_to_string()进行重写
 
 > 例如, 使用render_to_string()在我们的渲染器中，我们确保instrumentation 时间不会触发量词，并且不会抛出重复渲染错误， 因为这些功能仅仅被加入到render方法中。
 
