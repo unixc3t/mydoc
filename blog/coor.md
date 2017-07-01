@@ -126,7 +126,7 @@
     # Initialize the Rails application.
     Rails.application.initialize!
 
-#### Running Tests
+###### Running Tests
 
 > 默认情况,rails plugin生成一个完成的测试，为我们的插件，让我们运行一下看看
 
@@ -152,4 +152,169 @@
       end
     end
 
-> 最后，注意到我们的测试文件引入了test/test_helper.rb，这个文件负责读取我们的application配置测试环境, 使用我们创建的插件骨架,和一个绿色的测试套件。我们开始编写我们的自定义渲染器
+> 最后，注意到我们的测试文件引入了test/test_helper.rb，这个文件负责读取我们的application和配置测试环境, 使用我们创建的插件骨架,和一个绿色的测试套件。我们开始编写我们的自定义渲染器
+
+
+##### 1.2 Writing the Renderer
+
+> 在本章开头，我们简单的讨论了render()方法和一个它接受的选项，但是我们没有正式描述什么是一个renderer渲染器
+
+> 一个render只不过是一个回调，通过暴露的render()方法来自定义它的行为。加入我们自己的render到rails里很简单，让我们看一下:json render的源码
+
+    add :json do |json, options|
+      json = json.to_json(options) unless json.kind_of?(String)
+        if options[:callback].present?
+           self.content_type ||= Mime::JS
+           "#{options[:callback]}(#{json})"
+        else
+          self.content_type ||= Mime::JSON
+          json
+      end
+    end
+
+> 所以，当我们调用 下面的方法在我们的appliction里
+
+    render json: @post
+
+> 它会调用定义的block作为：json的render， block中的本地变量json指向@post， 并且其他传递给render方法的选项存储在opstions变量里,在这个例子里，因为访美被调用没有传递任何附加options，所以他是一个空的hash
+
+> 下面章节,我们想加入一个:pdf renderer，使用给定的模板创建pdf文档，发送给客户端添加适当的header信息, 传递给:pdf的option的值应该是文件的名字
+
+> 下面是我们想提供api的例子
+
+    render pdf: 'contents', template: 'path/to/template'
+
+> 即使rails知道如何渲染模板并且发送文件给客户端,但是它不知道怎样处理pdf文件，对于这点
+> 我们使用Prwan
+
+###### Playing with Prawn
+
+> Prawn是一个pdf生成lib，因为它将会成为我们插件的一个依赖，所以我们需要假如它到我们的pdf_renderer.gemspec里面
+
+    s.add_dependency "prawn","0.12.0"
+
+> 下一步，我们告诉bundler去安装我们的新的依赖，并且通过ruby交互来测试
+
+    $ bundle install
+    $ irb
+
+> 使用irb，我们创建一个简单的Pdf
+
+    require "prawn"
+    pdf = Prawn::Document.new
+    pdf.text("A PDF in four lines of code")
+    pdf.render_file("sample.pdf")
+
+> 退出irb，你能在启动irb的目录下看到一个pdf文件, prawn提供了创建pdf的语言，虽然这给了我们一个
+> 灵活的api，但是缺点就是不能创建来自html的pdf
+
+#####　Code in Action
+
+> 在我们深入代码之前，我们先写一个测试，因为我们有一个虚拟的application.我们可以在一个真实的rails程序中创建控制器,使用它测试完整的request栈,让我们命名这个控制器叫做HomeController并且加入下面这些内容
+    pdf_renderer/test/dummy/app/controllers/home_controller.rb
+    class HomeController < ApplicationController
+      def index
+        respond_to do |format|
+          format.html
+          format.pdf { render pdf: "contents" }
+        end
+      end
+    end
+
+> 然后创建这个pdf 视图,
+    pdf_renderer/1_prawn/test/dummy/app/views/home/index.pdf.erb
+    This template is rendered with Prawn.
+
+> 添加路由
+
+    Dummy::Application.routes.draw do
+      get "/home", to: "home#index", as: :home
+    end
+
+> 然后我们编写一个集成测试验证访问/home.pdf的返回结果
+
+    pdf_renderer/test/integration/pdf_delivery_test.rb
+
+    require "test_helper"
+      class PdfDeliveryTest < ActionDispatch::IntegrationTest
+        test "pdf request sends a pdf as file" do
+          get home_path(format: :pdf)
+          assert_match "PDF", response.body
+          assert_equal "binary", headers["Content-Transfer-Encoding"]
+          assert_equal "attachment; filename=\"contents.pdf\"",
+          headers["Content-Disposition"]
+          assert_equal "application/pdf", headers["Content-Type"]
+        end
+      end
+  
+>  这个测试使用了response headers去断言，一个二进制编码pdf文件作为一个附件发送,包括预期的文件名。
+> 即使我们不能断言太多pdf体中因为台式编码,我们能够至少断言pdf包含的字符串,使用prawn加入pdf体
+> 让我们运行这个测试,　观察失败信息
+
+    1) Failure:
+    test_pdf_request_sends_a_pdf_as_file(PdfDeliveryTest):
+    Expected /PDF/ to match "This template is rendered with Prawn.\n".
+
+> 这个失败和预期的一样，因为我们美誉告诉rails怎样在render()中处理:pdf选项，它简单的渲染这个
+> 模板没有包装成一个pdf文件，　我们可以通过实现我们的渲染器在lib/pdf_renderer.rb中添加一些代码
+
+    pdf_renderer/lib/pdf_renderer.rb
+
+    require "prawn"
+    ActionController::Renderers.add :pdf do |filename, options|
+      pdf = Prawn::Document.new
+      pdf.text render_to_string(options)
+      send_data(pdf.render, filename: "#{filename}.pdf",
+      disposition: "attachment")
+    end
+
+> 在这个代码块中,我们创建了一个pdf文档,加入一些文本,发送这个pdf以附件的形式，使用send_data()方法，我们运行这个测试观察结果，最后通过,我也可以到虚拟application里，启动服务器rails server
+> 使用http://localhost:3000/home.pdf测试
+
+> 即使我们,测试通过了,仍然有一些需要解释,首先，注意到我们没有做的，设置Content-Type为appplication/pdf, rails怎么知道那个content type应该设置在我们的response里？
+
+> content type被正确设置，因为rails分享了一组已经注册的Mime types:
+
+    rails/actionpack/lib/action_dispatch/http/mime_types.rb
+
+    Mime::Type.register "text/html", :html, %w( application/xhtml+xml ), %w( xhtml )
+    Mime::Type.register "text/plain", :text, [], %w(txt)
+    Mime::Type.register "text/javascript", :js,
+    %w(application/javascript application/x-javascript)
+    Mime::Type.register "text/css", :css
+    Mime::Type.register "text/calendar", :ics
+    Mime::Type.register "text/csv", :csv
+    Mime::Type.register
+    Mime::Type.register
+    Mime::Type.register
+    Mime::Type.register
+    Mime::Type.register
+    Download from Wow! eBook <www.wowebook.com>
+    "image/png", :png, [], %w(png)
+    "image/jpeg", :jpeg, [], %w(jpg jpeg jpe pjpeg)
+    "image/gif", :gif, [], %w(gif)
+    "image/bmp", :bmp, [], %w(bmp)
+    "image/tiff", :tiff, [], %w(tif tiff)
+
+    Mime::Type.register "video/mpeg", :mpeg, [], %w(mpg mpeg mpe)
+    Mime::Type.register
+    Mime::Type.register
+    Mime::Type.register
+    Mime::Type.register
+    "application/xml", :xml, %w(text/xml application/x-xml)
+    "application/rss+xml", :rss
+    "application/atom+xml", :atom
+    "application/x-yaml", :yaml, %w( text/yaml )
+    Mime::Type.register "multipart/form-data", :multipart_form
+    Mime::Type.register "application/x-www-form-urlencoded", :url_encoded_form
+    Mime::Type.register "application/json", :json,
+    %w(text/x-json application/jsonrequest)
+    Mime::Type.register "application/pdf", :pdf, [], %w(pdf)
+    Mime::Type.register "application/zip", :zip, [], %w(zip)
+
+> 注意pdf格式如何被定义成相应的内容类型，当我们请求这个/home.pdf url时， rails从url中得到
+> pdf格式，并且查找匹配HomeController#index中format.pdf代码块，然后处理设置内容类型在调用
+> block之前,然后调用render
+
+> 回到我们的渲染实现,虽然send_data()是一个rails公开方法,已经在第一个rails版本就出现了,
+> 你或许没有听说过render_to_string(),为了更好的理解这个，我们来看一下rails 渲染处理整个流程
