@@ -432,4 +432,54 @@
 
 > 例如, 使用render_to_string()在我们的渲染器中，我们确保instrumentation 时间不会触发量词，并且不会抛出重复渲染错误， 因为这些功能仅仅被加入到render方法中。
 
-> 在一些其他例子中，render_to_string()或许被重载,当我们使用Action Controller时，response body可以作为另一个对象，不是字符串，当模板被流处理时，对于这个原因，ActionController::Rendering 覆盖render_to_string()总是返回字符串如他的名字所示
+> 在一些其他例子中，render_to_string()或许被重载,当我们使用Action Controller时，当模板被流处理时,response body可以作为另一个对象，不是字符串，基于这个原因，ActionController::Rendering 覆盖render_to_string()总是返回字符串如他的名字所示
+
+###### 1.4 Taking It to the Next Level
+
+> 回到我们渲染器的实现, 我们现在理解了，当我们在控制器里使用下面这行代码意味着什么
+
+    format.pdf { render pdf: "contents" }
+
+> 在我们的渲染器中，变成下面
+
+    pdf = Prawn::Document.new
+    pdf.text render_to_string({})
+    send_data(pdf.render, filename: "contents.pdf",disposition: "attachment")
+
+> 当我们使用一个空的hash调用render_to_string(),这个_normalize_options() 方法在渲染栈中删除这个空的hash，
+> 然后使用当前action名字一样的模板进行渲染，最后，render_to_string()传递template: "#{controller_name}/#{action_name}"给view-renderer对象
+
+>事实上,我们的渲染器基于render_to_string(),允许我们使用下面的选项
+
+    render pdf: "contents", template: "path/to/templat
+
+> 内部处理代码，变成下面样子
+
+    pdf = Prawn::Document.new
+    pdf.text render_to_string(template: "path/to/template")
+    send_data(pdf.render, filename: "contents.pdf",disposition: "attachment")
+  
+  > 这次rednder_to_string()接收一个明确的模板来渲染，最后为了完成我们的渲染器，我们加一个测试确认可以选择模板来渲染
+  > 我们测试调用一个新的action在HomeController，使用:pdf和:template调用
+
+      pdf_renderer/test/dummy/app/controllers/home_controller.rb
+      def another
+      render pdf: "contents", template: "home/index"
+      end
+  
+  > 然后加入一个路由，为新的action
+
+      get "/another", to: "home#another", as: :another
+  
+  > 然后访问/another.pdf 确认一个pdf被返回
+
+      test "pdf renderer uses the specified template" do
+      get another_path(format: :pdf)
+      assert_match "PDF", response.body
+      assert_equal "binary", headers["Content-Transfer-Encoding"]
+      assert_equal "attachment; filename=\"contents.pdf\"",
+      headers["Content-Disposition"]
+      assert_equal "application/pdf", headers["Content-Type"]
+      end
+
+##### 1.5 略
