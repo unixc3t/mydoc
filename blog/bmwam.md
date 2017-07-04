@@ -256,3 +256,65 @@
       assert_equal "sample_mail", @model.class.model_name.singular
       assert_equal "Sample mail", @model.class.model_name.human
     end
+
+> 这与Active Record的预览行为类似，仅有的不同是active Record支持 国际化，MailForm就没这么幸运，但是可以使用ActiveModel::Translation扩展MailFormatter::Base，让我们写一个测试
+
+    mail_form/test/compliance_test.rb
+    test "model_name.human uses I18n" do
+      begin
+        I18n.backend.store_translations :en,
+          activemodel: { models: { sample_mail: "My Sample Mail" } }
+        assert_equal "My Sample Mail", @model.class.model_name.human
+      ensure
+        I18n.reload!
+      end
+    end
+
+> 这个测试添加了一个翻译到i18n末端，包含了SampleMeail类的人类可读形式，我们需要包装代码
+> 使用begin .. ensure,保证i18n最后重新加载， 移除我们添加的翻译，让我们更新MailForm::Base确保新测试通过
+
+    mail_form/lib/mail_form/base.rb
+      module MailForm
+        class Base
+        include ActiveModel::Conversion
+        extend ActiveModel::Naming
+        extend ActiveModel::Translation
+
+> 我们添加naming和translation之后，rake test返回更少的错误，我们继续学习，下面是我们失败的原因
+
+    The model should respond to errors
+    The model should respond to persisted?
+
+> 第一个失败信息和validations有关，Active Model没有告诉任何有关验证的宏命令(例如 validates_presence_of()), 但是他需要们定义一个方法叫做errors(), 返回一个hash,
+> hash中的每个值都是一个数组，我们可以修正这个报错信息，通过引入ActiveModel::Validations在我们的模型里
+
+    mail_form/lib/mail_form/base.rb
+    module MailForm
+      class Base
+        include ActiveModel::Conversion
+        extend ActiveModel::Naming
+        extend ActiveModel::Translation
+        include ActiveModel::Validations
+
+> 现在我们的model实例可以响应errors和valid?(),现在行为和active Record一样，此外，
+> ActiveModel::Validations添加了几个验证宏命令,例如，validates()，validates_format_of(),和validates_inclusion_of()
+
+> 现在我们运行rake test 并且看到最后一个错误信息
+
+    The model should respond to persisted?
+
+> 这次,rails没有帮助我们，幸运的是，可以很简单的实现persisted?()方法，我们的controller和views都是用这个persisted?()方法在不同的情况,例如，无论什么时候，我们调用
+> form_for(@model),它都会检查model是否存在， 如果存在，就创建一个Put请求，如果不存在
+> 就创建一个Post请求， 对于url_for也是一样的操作，生成的url取决于你的model
+
+> Active Record里，如果保存对象到数据库里，那么对象就是持久化的，换句话说，如果既不是新记录，也没被销毁， 然而，在我们的例子里，我们的对象没有保存到任何数据库， persisted?()应该总是返回false.
+
+
+> 让我们添加persisted?()方法到我们的MailForm::Base里
+
+    mail_for/lib/mail_form/base.rb
+    def persisted?
+     false
+    end
+
+> 这次，运行，rake test后，所有测试通过了，这意味着我们的模型符合active model api
