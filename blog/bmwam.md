@@ -318,3 +318,99 @@
     end
 
 > 这次，运行，rake test后，所有测试通过了，这意味着我们的模型符合active model api
+
+
+#### Delivering the Form
+
+> 下一步在我们的Mail Form实现逻辑添加，使用模型属性发送一个email, deliver()方法负责提交，
+> 发送邮件到我们email属性存储的地址， 邮件包含所有模型属性值，我们添加一个测试
+
+    mail_form/test/mail_form_test.rb
+    setup do
+       ActionMailer::Base.deliveries.clear
+    end
+
+    test "delivers an email with attributes" do
+      sample = SampleMail.new
+      # Simulate data from the form
+      sample.email = "user@example.com"
+      sample.deliver
+      assert_equal 1, ActionMailer::Base.deliveries.size
+      mail = ActionMailer::Base.deliveries.last
+      assert_equal ["user@example.com"], mail.from
+      assert_match "Email: user@example.com", mail.body.encoded
+    end
+
+
+> 当我们运行新的测试，我们得到一个失败，因为deliver()方法根本没存在，因为我们的模型具有来自ActiveModel::Validations的正确性的概念， deliver()方法应该在valid?为真时，发送邮件
+
+    mail_form/lib/mail_form/base.rb
+    def deliver
+      if valid?
+        MailForm::Notifier.contact(self).deliver
+      else
+        false
+      end
+    end
+
+> 负责创建和发送邮件是MailForm::Notifier类， 使用Action Mailer实现它
+
+    mail_form/lib/mail_form/notifier.rb
+      module MailForm
+        class Notifier < ActionMailer::Base
+          append_view_path File.expand_path("../../views", __FILE__)
+          def contact(mail_form)
+          @mail_form = mail_form
+          mail(mail_form.headers)
+          end
+        end
+      end
+
+> contact()方法给@mail_form赋值，通过给定的Mai Form对象，然后条用headers方法，这个方法应该返回一个拥有邮件数据，并且使用:to,:form,:subject为key的hash, 这个方法，不应该在MailForm::Base中定义，而是在其子类中， 这是个简单的但是强大的api设计，允许一个开发者定制邮件提交方式，不需重定义或者使用猴子补丁，对于Notifier class来说.
+
+> 我们的MailForm::Notifer也调用append_view_path()方法，添加lib/views在我们的插件目录，
+>作为一个新的搜索模板的地址，最后一步之前，我们运行测试套件加在我们的新类
+
+    mail_form/lib/mail_form.rb
+    autoload :Notifier, "mail_form/notifier"
+
+> 我们定义headers()方法，在SampliMail 类中
+
+    mail_form/test/fixtures/sample_mail.rb
+    def headers
+      { to: "recipient@example.com", from: self.email }
+    end
+
+> 当我们运行rake test，出现下面失败信息
+
+    1) Failure:
+    test_delivers_an_email_with_attributes(MailFormTest):
+    ActionView::MissingTemplate: Missing template mail_form/notifier/contact
+
+> 这是意料之中，我们没有添加模板给我们的mailer,我们的默认邮件模板展示主题消息和打印所有属性和他们的值
+
+    mail_form/lib/views/mail_form/notifier/contact.text.erb
+    <%= message.subject %>
+    <% @mail_form.attribute_names.each do |key| -%>
+    <%= @mail_form.class.human_attribute_name(key) %>: <%= @mail_form.send(key) %>
+    <% end -%>
+
+> 为了显示素有属性，我们需要全部属性名字列表，但是我们目前没有这样的列表， 我们可以通过class_attribute()实现这个attributes_names(),每次调用attributes被调用时更新attributes_names
+
+    mail_formlib/mail_form/base.rb
+    # 1) Define a class attribute and initialize it
+      class_attribute :attribute_names
+      self.attribute_names = []
+
+      def self.attributes(*names)
+        attr_accessor(*names)
+        define_attribute_methods(names)
+
+         # 2) Add new names as they are defined
+        self.attribute_names += names
+      end
+
+> 当我们使用class_attributes()用来定义names,names可以自动被继承，如果一个类继承我们的sampleMail fixture,那么它自动继承全部属性名。
+
+> 在我们运行 rake test, 所有的测试应该是绿色的，我们的Mail Form实现完成，无论何时我们需要创建一个联系表单，我们就创建一个类，继承自MailForm::Base,我们定义我们的attributes和邮件headers
+>我们准备好开始了， 确保一切正确，我们使用集成测试工具来检查
