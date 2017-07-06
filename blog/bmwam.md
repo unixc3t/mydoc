@@ -414,3 +414,154 @@
 
 > 在我们运行 rake test, 所有的测试应该是绿色的，我们的Mail Form实现完成，无论何时我们需要创建一个联系表单，我们就创建一个类，继承自MailForm::Base,我们定义我们的attributes和邮件headers
 >我们准备好开始了， 确保一切正确，我们使用集成测试工具来检查
+
+
+#### 2.2 Integration Tests with Capybara
+
+> 前面章节,我们使用rails测试工具确保一个pdf被发送到客户端，为了保证我们的项目工作作为一个联系表单，我们应该创建一个真实的表单，提交它到适当的后端，验证邮件是否发送成功，如果使用rails测试工具实际上比较难写，大多数时候，
+> 我们最后直接编写一个request到后端，
+
+    post "/contact_form", contact_form:
+    { email: "jose@example.com", message: "hello"}
+
+
+> 编写一个使用Post()方法请求，指明参数，对一些场景很有用，尤其是对于api测试，但是当测试一个表单工作流就不太合适，例如我们如何确保一个提交按钮在页面上存在？当我们点击它之后会发生什么？，发送请求给URL地址？如果我们忘记邮件field填写怎么办？
+
+> 为了保证这些问题可以解决，通常使用Capybara.这样更健壮的测试工具，capybara提供了简单的dsl语言应对这种琐碎测试。我们首先在开发依赖中添加
+
+    mail_form/mail_form.gemspec
+    s.add_development_dependency "capybara", "~> 2.0.0"
+
+> 为了使用Capybara，我们定义一个新的测试用例类，叫做ActiveSupport::IntegrationCase，这个类基于ActiveSupport::TestCase构建，引入了rails的url帮助方法和capybara dsl
+
+      mail_form/test/test_helper.rb
+      require "capybara"
+      require "capybara/rails"
+
+      # Define a bare test case to use with Capybara
+      class ActiveSupport::IntegrationCase < ActiveSupport::TestCase
+        include Capybara::DSL
+        include Rails.application.routes.url_helpers
+      end
+
+> 现在我们准备编写第一个测试
+
+    mail_form/5_delivery/test/integration/navigation_test.rb
+    require "test_helper"
+
+    class NavigationTest < ActiveSupport::IntegrationCase
+      setup do
+       ActionMailer::Base.deliveries.clear
+      end
+
+      test "sends an e-mail after filling the contact form" do
+        visit "/"
+        fill_in "Name",
+        with: "John Doe"
+        fill_in "Email",
+        with: "john.doe@example.com"
+        fill_in "Message", with: "MailForm rocks!"
+        click_button "Deliver"
+
+        assert_match "Your message was successfully sent.", page.body
+        assert_equal 1, ActionMailer::Base.deliveries.size
+        mail = ActionMailer::Base.deliveries.last
+        assert_equal ["john.doe@example.com"], mail.from
+        assert_equal ["recipient@example.com"], mail.to
+        assert_match "Message: MailForm rocks!", mail.body.encoded
+      end
+    end
+
+> 这个集成测试首先访问根目录，返回一个有name,email,message fields的表单，提交这个表单，服务器会发送一个邮件给收件人，并且返回用户一个成功信息， 为了确保测试通过，，我们添加model,controller,和view，和路由，在虚拟app里面添加这些，我们先开始路由配置
+
+    mail_form/test/dummy/config/routes.rb
+
+    Dummy::Application.routes.draw do
+      resources :contact_forms, only: :create
+      root to: "contact_forms#new"
+    end
+
+> 然后是控制器和试图
+
+    mail_form/test/dummy/app/controllers/contact_forms_controller.rb
+    class ContactFormsController < ApplicationController
+      def new
+         @contact_form = ContactForm.new
+      end
+
+        def create
+          @contact_form = ContactForm.new(params[:contact_form])
+
+          if @contact_form.deliver
+              redirect_to root_url, notice: "Your message was successfully sent."
+           else
+            render action: "new"
+          end
+        end
+    end
+
+    mail_form/test/dummy/app/views/contact_forms/new.html.erb
+    <h1>New Contact Form</h1>
+    <%= form_for(@contact_form) do |f| %>
+    <% if @contact_form.errors.any? %>
+    <div id="errorExplanation">
+    <h2>Oops, something went wrong:</h2>
+    <ul>
+    <% @contact_form.errors.full_messages.each do |msg| %>
+
+    <li><%= msg %></li>
+    <% end %>
+    </ul>
+    </div>
+    <% end %>
+    <div class="field">
+    <%= f.label :name %><br />
+    <%= f.text_field :name %>
+    </div>
+    <div class="field">
+    <%= f.label :email %><br />
+    <%= f.text_field :email %>
+    </div>
+    <div class="field">
+    <%= f.label :message %><br />
+    <%= f.text_field :message %>
+    </div>
+    <div class="actions">
+    <%= f.submit "Deliver" %>
+    </div>
+    <% end %>
+
+> 最后是model
+
+    class ContactForm < MailForm::Base
+      attributes :name, :email, :message
+      def headers
+        { to: "recipient@example.com", from: self.email }
+      end
+    end
+
+> 因为我们测试使用了flash messages，所以我们需要添加他们到layout文件 在yield前面调用
+
+    <p style="color: green"><%= notice %></p>
+
+> 所有都就位了，我们开始运行测试，得到了一个失败信息
+
+    1) Error:
+    test_sends_an_e-mail_after_filling_the_contact_form(NavigationTest):
+    ArgumentError: wrong number of arguments (1 for 0)
+    app/controllers/contact_forms_controller.rb:7:in `initialize'
+
+  
+> 这个失败信息发生，因为initialize()方法，不像active Record 不需要一个hash作为参数，active model兼容api没有告诉我们任何关于我们模型如何被初始化，让我们实现一个Initialize()方法， 接收一个hash作为参数，设置属性值
+
+    mail_form/lib/mail_form/base.rb
+    def initialize(attributes = {})
+      attributes.each do |attr, value|
+      self.public_send("#{attr}=", value)
+      end if attributes
+    end
+
+> 在我们定义完了前面的方法，我们的集成测试成功了， 结果如我们预期，记住，你可以进虚拟application里，rails s启动程序，加入一些验证
+
+
+#####　2.3　Taking It to the Next Level
