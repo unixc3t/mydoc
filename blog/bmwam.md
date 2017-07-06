@@ -565,3 +565,108 @@
 
 
 #####　2.3　Taking It to the Next Level
+
+> 前面章节，我们编写了我们的邮件插件使用了基本特性和添加了集成测试确保它工作，现在我们可以使用active model做更多事，让我们看一些例子
+
+
+###### Validators
+
+> 每个rails 开发者都熟悉rails validations,他们经常被用来证明可以提高生产力，　在rails源码中，每个验证器背后都有一个validator类，让我们看看validates_presence_of这个宏方法
+
+    rails/activemodel/lib/active_model/validations/presence.rb
+    def validates_presence_of(*attr_names)
+      validates_with PresenceValidator, _merge_attributes(attr_names)
+    end
+
+> validates_with 方法负责吃书画，通过给定的ActiveModel::Validations::PresenceValidator类和　_merge_attributes()将属性转换成hash, 让你按照下面调用
+
+    validates_presence_of :name
+
+> 实际上你是这么做
+
+  　validates_with PresenceValid, attributes: [:name]
+
+> 大致与下面相同
+
+    validate PresenceValidator.new(attributes: [:name])
+
+> 这种处理方式类似预先使用validates方法
+  
+    validates :name, presence: true
+
+> 效果与下面一样
+
+    validate PresenceValidator.new(attributes: [:name])
+
+> 问题是，rails怎么知道:presence应该是使用 PresenceValidator? 因为 他将:presence 转换成
+> PresenceValidator 然后查找一个常量叫做PrsenceValidator的类， 代码如下
+
+    const_get("#{key.to_s.camelize}Validator")
+
+> 这个描述很重要，因为我们现在可以加入任何验证到任何类，基于ruby的常量查找， 为了理解他怎么工作的。我们打开一个irb，然后输如下面
+
+      module Foo
+          module Bar
+          end
+      end
+      class Baz
+          include Foo
+      end
+
+      Baz::Bar # => Foo::Bar
+
+> 注意最后一行，即使bar没有定义在Baz里，脚本返回Foo::Bar ，发生这个是因为无论什么时候常量查找，ruby搜索所有在祖先链的对象，因为Foo被Baz include,foo是baz祖先，允许ruby查找Foo::Bar常量，沿着祖先连
+
+> 为了给你展示如何使用这个，我们实现一个absence validator验证器在我们的MailForm::Base里，因为许多垃圾邮件来自表单，我们使用absence验证器作为蜜罐
+
+> 这个蜜罐创建一个field，例如Nickname,通过css隐藏，正常人们不会看到这个表单项，也不会填它，然是robots会自动填它像填充其他属性一样，所以。无论什么时候，如果Nickname存在值，就不应该被发送，因为是垃圾邮件
+
+> 根据Ruby的常量查找规则，我们能够给，在一个模块里实现了AbsenceValidator，并且在需要的类里引入了这个模块的任意类的validates()方法添加一个:absence选项
+>让我们写一个简单测试
+
+    mail_form/6_final/test/mail_form_test.rb
+    test "validates absence of nickname" do
+      sample = SampleMail.new(nickname: "Spam")
+      assert !sample.valid?
+      assert_equal ["is invalid"], sample.errors[:nickname]
+    end
+
+
+> 测试显示验证必须无效。如果nickname包含任何值， 让我们添加Nickname 和：absence验证给我们的SmampleMail对象
+
+    mail_form/test/fixtures/sample_mail.rb
+      attributes :nickname
+      validates :nickname, absence: true
+
+> 当我们运行测试，我们失败了，因为SampleMail不能读取AbsenceValidator，这个验证器没有定义，我们来创建他
+
+    mail_form/lib/mail_form/validators.rb
+    module MailForm
+      module Validators
+        class AbsenceValidator < ActiveModel::EachValidator
+          def validate_each(record, attribute, value)
+            record.errors.add(attribute, :invalid, options) unless value.blank?
+          end
+        end
+      end
+    end
+
+> 我们的验证器继承了EachValidator，对于每个在初始化的属性值，EachValidator调用validate_each()方法在每条记录上，attribute和它的对应值， 对于每个属性，我们添加一个错误信息，如果他的值不是空。
+
+> 下一步引入验证器
+
+    mail_form/lib/mail_form/base.rb
+    include MailForm::Validators
+
+> 我们添加MailForm::Validators到MailForm::Base继承链中,当我们将：absence传给validates方法时，他会去寻找AbsenceValidator常量，在 MailForm::Validators模块中查找，为了确保可以验证器真正运行，我们需要加载我们的验证器
+
+    mail_form/lib/mail_form.rb
+    autoload :Validators, 'mail_form/validators'
+
+> 运行测试 ，rake test,所有测试通过了，这个实现相当完美，仅仅添加:absense到validates()方法，不需要我们注册这个选项到其他地方， 这个选项在运行是被找到，
+
+> 将昵称字段添加到我们的联系人表单视图，并使用隐藏他感觉很好，我们的蜜罐完美运行
+
+##### Callbacks
+
+> 如果我们
