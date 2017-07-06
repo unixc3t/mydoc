@@ -669,4 +669,89 @@
 
 ##### Callbacks
 
-> 如果我们
+> 如果我们在deliver()方法周围提供回调不是更酷？我们使用activeModel::CallBacks添加，before和after方法， 我们来修改SampleMail fixture
+
+
+    mail_form/6_final/test/fixtures/sample_mail.rb
+    # 下面是使用方式
+    before_deliver do
+    evaluated_callbacks << :before
+    end
+    after_deliver do
+    evaluated_callbacks << :after
+    end
+    def evaluated_callbacks
+    @evaluated_callbacks ||= []
+    end
+
+> 我们添加了一个 evaluated_callbacks()方法来存放所有需要执行的回调函数，包裹我们实现的before_deliver() and after_deliver(), 我们测试断言两个回调是否执行
+
+    mail_form/test/mail_form_test.rb
+    test "provides before and after deliver hooks" do
+    sample = SampleMail.new(email: "user@example.com")
+    sample.deliver
+    assert_equal [:before, :after], sample.evaluated_callbacks
+    end
+
+> 最后我们将在MailForm::Base添加支持回调 需要三个步骤: 使用ActiveModel::Callbacks扩展我们的类，定义我们的回调，最后重新deliver()实现，
+
+    mail_form/lib/mail_form/base.rb
+      # 1) Add callbacks behavior
+      extend ActiveModel::Callbacks
+
+       # 2) Define the callbacks. The line below will create both before_deliver
+       # and after_deliver callbacks with the same semantics as in Active Record
+       # 下面这行就创建了before_deliver和after_deliver回调，如果需要回调就自己重写这俩方法
+        define_model_callbacks :deliver
+
+        # 3) Change deliver to run the callbacks
+          def deliver
+            if valid?
+              run_callbacks(:deliver) do
+                MailForm::Notifier.contact(self).deliver
+              end
+            else
+              false
+          end
+        end
+
+> 和active Record回调一样，你可以传递procs string,symbols和任何可以相应回调方法名的对象
+
+
+##### A Base Model
+
+> 在许多情况下,开发人员想在activemodel实现兼容的API，实现搜索功能时，甚至在将注册流程拆分成多个步骤时
+> 对于这点 Active Model 提供了一个ActiveModel::Model模块，可以被任何类包含
+
+    class Person
+    include ActiveModel::Model
+    attr_accessor :name, :age
+    end
+
+> 通过引入 ActiveModel::Model我们确保它通过所有ActiveModel::Lint::Test测试，我们看看源码
+
+      rails/activemodel/lib/active_model/model.rb
+      module ActiveModel
+        module Model
+          def self.included(base)
+           base.class_eval do
+             extend ActiveModel::Naming
+             extend ActiveModel::Translation
+             include ActiveModel::Validations
+             include ActiveModel::Conversion
+          end
+        end
+
+        def initialize(params={})
+            params.each do |attr, value|
+             self.public_send("#{attr}=", value)
+            end if params
+        end
+
+          def persisted?
+            false
+          end
+        end
+      end
+
+> 你可以看到这个模块包含了我们这章实现的所有行为， 在我们的应用程序中需要这些功能时，这是一个很好的起点！
