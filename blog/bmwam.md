@@ -9,7 +9,7 @@
 
 ##### 2.1 Creating Our Model
 
-> Mail Form 对象属于model-view-controller结构中Model那部分,作为接收从表单发送信息的接受者和通过业务模型提交到指定存储容器, 我们以active record工作的方式构造MailForm::Base,我们提供了一个类名MailForm::Base的类，
+> Mail Form 对象属于model-view-controller结构中Model那部分,作为接收从表单发送信息的接受者和通过业务模型提交到指定存储容器, 让我们构造MailForm::Base以Active Record的工作方式,我们提供了一个类名MailForm::Base的类，
 > 包含了最需要的特性，指定属性的能力,与rails form无缝集成， 和我们前面章节做的一样，我们使用rails plugin 创建新插件
 
     rails plugin new mail_form
