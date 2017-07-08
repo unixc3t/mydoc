@@ -111,3 +111,56 @@
 ###### Writing the Code
 
 
+> 我们声明解析器为SqlTemplate::Resolver 并且采用三步实现它
+> 首先接收name, prefix partial 和details作为参数并且格式化他们，然后我们根据格式化的参数，创建一个sql语句，查询数据库，最后一部，将数据库得到的记录转换成 ActionView::Template实例返回
+
+> 我们首先编写一个测试
+
+    templater/test/models/sql_template_test.rb
+    require 'test_helper'
+      class SqlTemplateTest < ActiveSupport::TestCase
+        test "resolver returns a template with the saved body" do
+          resolver = SqlTemplate::Resolver.new
+          details = { formats: [:html], locale: [:en], handlers: [:erb] }
+
+          # 1) Assert our resolver cannot find any template as the database is empty
+          # find_all(name, prefix, partial, details)
+
+          assert resolver.find_all("index", "posts", false, details).empty?
+        
+          # 2) Create a template in the database
+        
+        SqlTemplate.create!(
+          body: "<%= 'Hi from SqlTemplate!' %>",
+          path: "posts/index",
+          format: "html",locale: "en",handler: "erb", partial: false)
+
+          # 3) Assert that a template can now be found
+          template = resolver.find_all("index", "posts", false, details).first
+          assert_kind_of ActionView::Template, template
+
+          # 4) Assert specific information about the found template
+          assert_equal "<%= 'Hi from SqlTemplate!' %>", template.source
+          assert_kind_of ActionView::Template::Handlers::ERB, template.handler
+          assert_equal [:html], template.formats
+          assert_equal "posts/index", template.virtual_path
+          assert_match %r[SqlTemplate - \d+ - "posts/index"], template.identifier
+        end
+      end
+
+> 解析器中的find_all()方法应该返回一个ActionView::Template实例，这个模板实例按照下面方式初始化
+
+    ActionView::Template.new(source, identifier, handler, details)
+
+> source是模板主体被存储在数据库中，identifier是一个唯一的字符串代表模板，我们通过加入数据库template id确保唯一性
+
+> handler这个对象负责编译模板，handler不是字符串，而是一个对象，使用ActionView::Template的registered_template_handler()方法得到
+
+    ActionView::Template.registered_template_handler("erb") =>#<ActionView::Template::Handlers::ERB:0x007fc722516490>
+
+> 最后一个给初始化模板的参数是一个hash有三个key，:format用来找到模板，：updated_at模板最后更新时间，和一个代表模板的:virtual_path
+
+> 因为，模板不在需要一个文件系统，不再需要一个path路径，这打破了一些依赖依赖文件系统的rails特性，例如模板中的i18n缩写t(".messge")，它使用模板路径进行翻译，所以，无论何时，你在模板app/views/users/index里面，那么这几个简写形式将去找到"users.index.message"对应翻译
+
+
+> 为了解决这个需求，rails需要模板提供一个：virtual_path，你可以存储模板在任何位置，但是你需要提供一个:virtual_path，如果模板存储在文件系统可以作为路径存储位置，这就允许t("message")通过虚拟路径来实现预期
