@@ -34,3 +34,80 @@
 
 > rails提供了一个抽象的 解析器实现，叫做 ActionView::Resolver 
 > 在这章，我们将使用它创建一个解析器，使用数据库作为存储模板，所以我们可以通过数据库存储页面，通过web api和我们喜欢的模板处理器(liquid erb haml)编辑模板.下面我们来实现
+
+
+#### 3.2 Setting Up a SqlResolver
+
+> 这次，开发一个模板管理系统，开发一个rail application代替使用rails plugin插件方式开发， 这个程序交错template,我们使用下面这行命令
+
+    $ rails new templater
+
+> 接下来，我们定义一个model,用来在数据库里存放模板，我们使用rails scaffold 生成器
+
+    $ rails generate scaffold SqlTemplate body:text path:string \
+    format:string locale:string handler:string partial:boolean
+
+> body属性是一个text字段，用来存储整个模板，path存储类似文件系统路径。(例如 UserController控制下下的index()方法，users/index作为path)，format和local存储木办个事和本地变量， handler存储模板处理器(erb,haml),最后整个partial告诉我们整个模板是否是一个局部模板
+
+> 在执行migration之前，我们做一个改变，设置partial默认值是false
+
+    t.boolean :partial, default: false
+
+> 然后运行整个migrations
+
+    $ bundle exec rake db:migrate
+
+>目前，没有什么奇怪的，下一步我们创建一个模板解析器，使用sqlTemplate模型，将模板从数据读取和展示，通过resolver api
+
+
+###### The Resolver API
+
+> resolver api只由一个单独方法组成，叫做find_all(), 返回一组模板，下面是方法签名
+
+    def find_all(name, prefix, partial, details, cache_key, locals)
+
+> 对于一个html请求 UsersController的index方法， 参数应该如下方式展示
+
+    find_all("index", "users", false, { formats: [:html],
+      locale: [:en, :en], handlers: [:erb, :builder, :rjs] }, nil, [])
+
+
+> 对于这个简单的请求，我们可以看到 name对应控制器里的action，prefix对应了控制器名字，partial是一个布尔值，告诉我们是否这个模板作为一个局部模板， details是一个hash，包含用于查找的额外信息， 例如，请求格式，国际化本地设置，然后就是模板解析器，最后两个参数就是cache_key和locals,这是个空数组，用于渲染时的本地变量
+
+> rails提供了一个抽象的解析实现，叫做ActionView::Resolver，我们使用这个作为我们的解析基础，部分源码如下，重点关注find_all和find_templates()方法
+
+    rails/actionpack/lib/action_view/template/resolver.rb
+      module ActionView
+        class Resolver
+          cattr_accessor :caching
+          self.caching = true
+           def initialize
+             @cache = Cache.new
+            end
+            def clear_cache
+             @cache.clear
+            end
+            def find_all(name, prefix=nil, partial=false, details={}, key=nil,locals=[])
+            cached(key, [name, prefix, partial], details, locals) do
+              find_templates(name, prefix, partial, details)
+            end
+          end
+
+        private
+          def find_templates(name, prefix, partial, details)
+             raise NotImplementedError
+            end
+          end
+      end
+
+> find_all实现了一个基本的缓存策略，如果缓存中没有缓存，代码块传递给cached并执行产生结果。当一个代码块被调用，它调用find_templates()方法， 跑出一个异常，表示这个方法需要被它的子类实现， 注意，cache_key和locals仅仅被缓存使用，他们不会被向下传递用于查找模板
+
+
+> 我们继承ActionView::Resolver并且实现find_templates()方法，使用sqlTemplate model从数据库得到模板，组成模板查找，如下图所示
+
+!()[05.png]
+
+
+###### Writing the Code
+
+
