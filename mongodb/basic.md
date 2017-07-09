@@ -175,3 +175,93 @@
 > 正则匹配
 
     db.goods.find({goods_name:{$regex:/^nokia/}})
+
+#### 3.3 Configuring Our Resolver for Production
+
+> 在生产环境中，为了确保模板可以快速的被找到，rails提供了一些方便的缓存，让我们了解一些缓存方式，以便让我们了解如何缓存模板，和当我们保存模板时让缓存过期,如前面说的
+> rails给我们提供了一个cache_key通过find_all()方法，我们的第一站是了解Rails为什么创建这个缓存键以及我们的解析器如何使用它。
+
+
+###### The Resolvers Cache
+
+> 在前面我们看到ActionView::Resolve的find_all方法自动缓存模板，使用cached()方法。缓存是在初始化创建被实例变量@cached引用，解析器缓存模板时仅在Rails.application.config.cache_classes返回true时，此外clear_cache()方法用来清空缓存
+
+> 每个模板缓存在函数的5个值中(5个值代表了这个函数)， cache_key,prefix name partial,还有 locals, 给定这5个key，我们可以存储这个模板在缓存中以3种方式。
+
+
+    # Nested hash
+    @cached[key][prefix][name][partial][locals]
+    # Simple hash with array as key
+    @cached[[key, prefix, name, partial, locals]]
+    # Simple hash with hash as key
+    @cached[key: key, prefix: prefix, name: name, partial: partial, locals: locals]
+
+> 所有三个缓存实现都给了我们想要的行为。然而，他们中不同的就是性能，我们需要了解ruby如何在hash中查找。来理解一点。
+
+
+##### Ruby Hash Lookup
+
+> 无论什么时候，我们存储一个值作为Hash对象的key，ruby要存储三样东西，给定的key,给定的值，key对应的hash值
+
+>这个hash值是作为给定的key，在key上调用Object#ahsh()方法的结果，这有一个简单的方法证明是基于Object#hash()方法，我们打开一个irb sessin,然后输入下面
+
+  class NoHash
+    undef_method :hash
+  end
+
+  hash = Hash.new
+  hash[NoHash.new] = 1
+  # => NoMethodError: undefined method `hash' for #<NoHash:0x101643820>
+
+> 如果我们取消我们对象中定义的hash方法，就不能在hash中存储它，添加一个元素到hash中类似创建一个新项在表格中，如下图
+
+![](06.png)
+
+> 当我们尝试在hash对象中，获取key对应的值的时候，例如hash[:b],ruby使用给定的key和Object#hash()方法计算他的值，然后查找时候有一项或多项在hash中只有一样的hash值
+> 例如，:b.hash返回231228,然后看到一项或多项都包含231228,ruby检查任意一个key时候等价于给定的key值，使用equality操作符 eql?() 因为:b.eql?(:b)返回true,所以我们例子中返回2
+
+
+> 为了证明ruby使用Object#hash()本地化所有项，我们打开另一个irb 输入下面代码
+
+    hash= {}
+    object = Object.new
+    hash[object] = 1
+    hash[object] # => 1
+    def object.hash; 123; end
+    hash[object] # => nil
+    hash
+    # => {#<Object:0x1016e3de8>=>1}
+
+> 这次我们使用任意一个ruby对象作为hash的key，我们可以成功设置和检索到值，然而
+> 在我们修改了hash方法的返回值之后，我们就不能得到一样的值了。
+
+
+> ruby存储使用Object#hash方法存储key可以得到快速的查找， 比较hash值比比较对象快
+
+> 这种实现方式意味着找到一个值，性能损失在eql?方法上，也涉及object#hash方法上，记住
+> 我们可以实现我们的解析器缓存使用一个nested hash 或者一个简单的使用数组作为key的hash，或者使用hash作为key，我们应该选择第一个，因为在nested-hash例子中，这个hash的key是字符串或者布尔值，ruby知道如何计算Object#hash()值，另一方面，Object#hash的计算对于array和hash更废资源
+
+> 我们在新的irb session中展示
+
+    require "benchmark"
+
+    foo = "foo"
+    bar = "bar"
+    array = [foo, bar]
+    hash  = {a: foo, b: bar}
+
+    nested_hash = Hash.new { |h,k| h[k] = {} }
+    nested_hash[foo][bar] = true
+    array_hash = { array => true }
+    hash_hash = { hash => true }
+    
+    Benchmark.realtime { 1000.times { nested_hash[foo][bar] } } 
+    # => 0.000342
+    Benchmark.realtime { 1000.times { array_hash[array] } }
+    # => 0.000779
+    Benchmark.realtime { 1000.times { hash_hash[hash] } }
+    # => 0.001645
+
+
+> nested-hash实现结果更好，虽然选择nested-hash表面上没有看出有多大价值，我们了解了ruby hash查找的功能有助于理解下一节
+
