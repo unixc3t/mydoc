@@ -265,3 +265,56 @@
 
 > nested-hash实现结果更好，虽然选择nested-hash表面上没有看出有多大价值，我们了解了ruby hash查找的功能有助于理解下一节
 
+
+###### The Cache Key
+
+> 我们已经知道，我们的解析器需要内建一个缓存，我们也知道我们的解析器使用nested hash存储模板，缓存依赖于五个值，@cached[key][prefix][name][partial][locals]> 然而，find_all签名需要6个参数
+
+    def find_all(name, prefix=nil, partial=false, details={}, key=nil, locals=[])
+
+> details是一个hash，包含了format,locale和其他信息用来查找模板，lookup context存储了这个信息，从文件系统中检索正确的模板是非常必要的。那么为什么缓存不使用这些细节呢？
+
+> 还记得我们确定，当比较较简单结构时，使用Object#hash()计算hash是十分耗费资源
+>，比如字符串？如果我们使用details作为key，在缓存hash中，会非常慢，因为details是一个数组组成的hash
+
+    details # => {
+      formats: [:html],
+      locale: [:en, :en],
+      handlers: [:erb, :builder, :rjs]
+      }
+      # Slow because details is a hash of arrays
+      @cached[details][prefix][name][partial][locals]
+
+  
+> 相反，lookup context 为每个details hash生成一个简单的ruby对象，将他作为cache_key给解析器，整个过程类似下面代码
+
+    # Generate an object for the details hash
+    @details_key ||= {}
+    key = @details_key[details] ||= Object.new
+    # And send it to each resolver
+    resolver.find_all(name, prefix, partial, details, key)
+    # Inside the resolver, the details value is not used in the cache
+    # Instead we use the key, which is a simple object and fast
+    @cached[key][prefix][name][partial][locals]
+
+> 换句话说，details没有在cache中被直接使用，而是通过cache_key， 这一点很重要，
+> 因为在一个请求期间，details很少改变， format和locale通常在渲染模板前就被设置
+> 因为，不管多少模板被渲染，解析器都在一个请求中被调用，cache_key仅仅被计算一次，如果details改变，例如请求format， 一个新的cache_key就会生成
+
+>让我们通过irb再试一次， 我们使用benchmark展示使用一个简单对象访问一个hash，例如cache_key,与使用数组hash作为key来比较 想details hash
+
+    require "benchmark"
+    cache_key = Object.new
+    details = {
+        formats: [:html, :xml, :json],
+        locale:[:en],
+        handlers: [:erb, :builder, :rjs]
+    }
+
+    hash_1 = { cache_key => 10 }
+    hash_2 = { details => 10 }
+    Benchmark.realtime { 1000.times { hash_1[cache_key] } } # => 0.000202
+    Benchmark.realtime { 1000.times { hash_2[details] } } # => 0.003937
+
+
+> 慢20倍，相当大差距，对于需要高性能的程序
