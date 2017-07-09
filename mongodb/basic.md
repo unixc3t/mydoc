@@ -318,3 +318,66 @@
 
 
 > 慢20倍，相当大差距，对于需要高性能的程序
+
+######　Expiring the Cache
+
+> 因为rails会自动操作解析器中的缓存，我们仅仅需要担心使用Resolver#clear_cache()方法让缓存过期，缓存被存储在解析器实例中，所以要使缓存过期，我们需要跟踪所有的SqlTemplate:Resolver实例，并且在更新数据库模板的时候调用实例的clear_cache()方法
+
+
+>然而，创建各自单独的SqlTemplate::Resolver实例的意义是什么？因为缓存在实例中，创建各自的实例,将会创造各自的缓存，减少了缓存的有效性，因此，我们不想穿件多个解析器实例，我们仅仅想在整个application分享同一个实例。
+
+>我们需要一个单例类，幸运的是，ruby有一个Singleton模块在标准库中,已经做了所有困难的部分。引入整个模块在SqlTemplate::Resolver中，使得SqlTemplate::Resolver.new()方法变成私有，暴露了一个SqlTemplate::Resolver.instance()方法作为替代，整个方法总是返回同一个对象。
+
+
+>让我们开始这个改变，首先需要引入单例模块
+
+    templater/2_improving/app/models/sql_template.rb
+    require "singleton"
+    include Singleton
+
+> 做完这个简单的改变之后，我们需要更新app/controllers/users_controller.rb 个test/models/sql_template_test.rb来调用SqlTemplate::Resolver.instance()方法替代
+> SqlTemplate::Resolver.new()
+
+    templater/2_improving/app/controllers/users_controller.rb
+    append_view_path SqlTemplate::Resolver.instance
+    templater/2_improving/test/models/sql_template_test.rb
+    resolver = SqlTemplate::Resolver.instance
+
+> 在这些地方使用单例解析器，我们编写一个测试在est/models/sql_template_test.rb文件里
+> 然后判断我们的缓存在适当的时候过期，这个新的测试应该更新来自fixture的SqlTemplate，并且判断应该返回更新后的模板
+
+      templater/2_improving/test/models/sql_template_test.rb
+      test "sql_template expires the cache on update" do
+      cache_key = Object.new
+      resolver = SqlTemplate::Resolver.instance
+      details
+      = { formats: [:html], locale: [:en], handlers: [:erb] }
+      t = resolver.find_all("index", "users", false, details, cache_key).first
+      assert_match "Listing users", t.source
+      sql_template = sql_templates(:users_index)
+      sql_template.update_attributes(body: "New body for template")
+      t = resolver.find_all("index", "users", false, details, cache_key).first
+      assert_equal "New body for template", t.source
+      end
+
+> 注意我们生成一个伪装cache_key，将Object.new传递给find_all()方法，只有一个缓存key被提供，缓存才有效
+
+> 最后,为了使我们的测试通过，我们添加一个after_save回调到SqlTemplate里面，
+
+
+    templater/2_improving/app/models/sql_template.rb
+    after_save do
+    SqlTemplate::Resolver.instance.clear_cache
+    end
+
+> 现在，每次模板被创建或者更新,缓存都会过期，允许修改选择的模板并且重新编译，不幸的是，
+> 这个方案有一个严重的限制， 它只适用于单个实例部署。，例如，如果你底层包含多个服务器或者你使用Passenger 或 Unicorn有一个实例池，一个请求将会得到一个指定实例，仅有它自己的缓存被清理，换句话说，在机器之间，缓存不是同步的
+
+> 幸运的是我们可以解决这个问题:
+
+* 一个选项是从新实现缓存，使用memcached或者redis在机器之间分享，使用适当的缓存机制
+
+* 另一个选项是通知每个实例，每当缓存过期时，例如，一个队列，在这种模式下,after_save()将会加单的Push一个消息，给队列，然后发送一个通知告诉所有订阅实例
+
+* 我们也可以通过设置config.action_view.cache_template_loading为false在生产环境，前面我提到过，解析器缓存只有在config.cache_classes为true时才激活
+
