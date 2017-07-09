@@ -164,3 +164,141 @@
 
 
 > 为了解决这个需求，rails需要模板提供一个：virtual_path，你可以存储模板在任何位置，但是你需要提供一个:virtual_path，如果模板存储在文件系统可以作为路径存储位置，这就允许t("message")通过虚拟路径来实现预期
+
+> 编写测试，理解模板是如何初始化的，我们通过继承ActionView::Reslover来实现find_templates()
+
+> 在我们的解析器中，考虑给定细节的顺序是很重要的。换句话说，如果这个locale 数组包含[:es, :en],一个模板使用西班牙语言优先级高于英语，一个方案就是为每个细节生成一个顺序，将结果存储到数据库，另一个选项是排序返回的模板，然而，为了简单起见，替代传递所有locales并且格式化sql语句，
+
+    templater/1_resolver/app/models/sql_template.rb
+      class SqlTemplate < ActiveRecord::Base
+      validates :body, :path, presence: true
+      validates :format, inclusion: Mime::SET.symbols.map(&:to_s)
+      validates :locale, inclusion: I18n.available_locales.map(&:to_s)
+      validates :handler, inclusion:
+      ActionView::Template::Handlers.extensions.map(&:to_s)
+      class Resolver < ActionView::Resolver
+      protected
+      def find_templates(name, prefix, partial, details)
+      conditions = {
+      path: normalize_path(name, prefix),
+      locale: normalize_array(details[:locale]).first,
+      format: normalize_array(details[:formats]).first,
+      handler: normalize_array(details[:handlers]),
+      partial: partial || false
+      }
+      ::SqlTemplate.where(conditions).map do |record|
+      initialize_template(record)
+      end
+      end
+      # Normalize name and prefix, so the tuple ["index", "users"] becomes
+      # "users/index" and the tuple ["template", nil] becomes "template".
+      def normalize_path(name, prefix)
+      prefix.present? ? "#{prefix}/#{name}" : name
+      end
+      # Normalize arrays by converting all symbols to strings.
+      def normalize_array(array)
+      array.map(&:to_s)
+      end
+
+      # Initialize an ActionView::Template object based on the record found.
+      def initialize_template(record)
+      source = record.body
+      identifier = "SqlTemplate - #{record.id} - #{record.path.inspect}"
+      handler = ActionView::Template.registered_template_handler(record.handler)
+      details = {
+      format: Mime[record.format],
+      updated_at: record.updated_at,
+      virtual_path: virtual_path(record.path, record.partial)
+      }
+      ActionView::Template.new(source, identifier, handler, details)
+      end
+      # Make paths as "users/user" become "users/_user" for partials.
+      def virtual_path(path, partial)
+      return path unless partial
+      if index = path.rindex("/")
+      path.insert(index + 1, "_")
+      else
+      "_#{path}"
+      end
+      end
+      end
+      end
+
+> 我们实现了格式化给定的参数，查询数据库，从结果集创建模板对象，我们也添加了对我们model的验证，确保body和path值不为空，确保是一个有效的格式
+
+> 由于添加了一些验证规则到我们的model里，一些测试会失败，因为我们的fixtures包含了无效的数据，为了使测试可以通过，我们修改fixture test/fixtures/sql_templates.yml，将数据修改为有效数据
+
+    one:
+      id: 1
+      path: "some/path"
+      format: "html"
+      locale: "en"
+      handler: "erb"
+      partial: false
+      body: "Body"
+
+> 现在我们的解析器已经实现完，并且测试全都通过， 我们开始创建一个新的脚手架，并且让他使用数据库的模板代替文件系统的。 我们使用下面命令创建一个用户
+
+    rails generate scaffold User name:string
+
+> 运行迁移文件
+
+    bundle exec rake db:migrate
+
+> 我们启动服务器，访问/users,像往常一样执行全部的创建读取更新，删除操作
+
+> 下一步我们访问 /sql_templates路径，创建一个模板，使用app/views/users/index.html.erb内容填充模板主体，设置路径为users/index,设置format, locale和处理器依次为,html,en,和erb，不勾选partial选项框
+
+> 保存这个新的模板，回到/users路径页面，现在删除这文件系统里的视图 app/views/users/index.html.erb。然后重新刷新页面,你应该得到一个错误信息，Template is missing,不要担心，这是我们预料之中，模板存储在数据库中，但是我们仍然没有告诉UsersController去使用新的解析器得到它
+
+> 我们通过添加下面代码到控制器
+
+        templater/1_resolver/app/controllers/users_controller.rb
+          class UsersController < ApplicationController
+          append_view_path SqlTemplate::Resolver.new
+
+> 当我们刷新在/users路径下刷新页面，我们看到整个页面再一次回来了，这次页面来自数据库， 虽然模板在数据库，整个布局文件让然来自文件系统，换句话说，一个请求过来，我们可以从不同的解析器得到模板
+
+> 随时回到/sql_templates页面，操纵存储模板的主体，并且通知 UsersController里的index()将会做出相应改变，我们可以通过ActionView::Resolver的抽象能力添加一些代码做到这一点
+
+> 进行下一步之前。我们运行测试套件，结果失败信息
+
+    1) Error:
+      test_should_get_index(UsersControllerTest)
+      ActionView::MissingTemplate: Missing template users/index,
+      application/index with {:locale=>[:en], :formats=>[:html],
+      :handlers=>[:erb, :builder, :raw, :ruby, :jbuilder, :coffee]}. Searched in:
+      * "templater/app/views"
+      * "#<SqlTemplate::Resolver:0x007f9774fbc0d0>"
+
+
+> 发生这个原因，我们删除文件系统的文件，虽然添加模板到开发数据库，但是我们的测试数据库没有模板，所以跑出MissingTemplate错误，在测试环境下，为了解决这个，我们修改sql_templates firture
+
+      templater/1_resolver/test/fixtures/sql_templates.yml
+        users_index:
+        id: 2
+        path: "users/index"
+        format: "html"
+        locale: "en"
+        handler: "erb"
+        partial: false
+        body: "<h1>Listing users</h1>
+        <table>
+        <tr>
+        <th>Name</th>
+        <th></th>
+        <th></th>
+        <th></th>
+        </tr>
+        <%% @users.each do |user| %>
+        <tr>
+        <td><%%= user.name %></td>
+        <td><%%= link_to 'Show', user %></td>
+        <td><%%= link_to 'Edit', edit_user_path(user) %></td>
+        <td><%%= link_to 'Destroy', user,
+        data: { confirm: 'Are you sure?' }, method: :delete %></td>
+        </tr>
+        <%% end %>
+        </table>
+        <br />
+        <%%= link_to 'New user', new_user_path %>"
