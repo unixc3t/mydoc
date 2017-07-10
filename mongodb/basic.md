@@ -381,3 +381,141 @@
 
 * 我们也可以通过设置config.action_view.cache_template_loading为false在生产环境，前面我提到过，解析器缓存只有在config.cache_classes为true时才激活
 
+
+#### 3.4 Serving Templates with Metal
+
+> 现在，我们能够创建和编辑模板从ui界面，用我们的自己的解析器提供解析， 我们准备好谈论下一话题， 让我们使用我们的模板工具作为一个简单的内容管理系统
+
+###### Creating the CmsController
+
+> 我们能够create update和删除模板，通过访问路径/sql_templates 现在我们需要暴露他们基于可访问的url
+
+
+> 为了实现这一点，我们将所有请求映射到/cms/*下，对应一个控制器，将使用我们的解析器找到来自数据库的模板， 渲染他们返回给客户端， 一个/cms/about请求应该返回一个存储在数据库里的SqlTemplate，path对应about
+
+> 我们用几行代码来实现这个功能， 我们使用capybara编写一个集成测试， 设置capybara
+
+    templater/2_improving/test/test_helper.rb
+    require "capybara"
+    require "capybara/rails"
+    # Define a bare test case to use with Capybara
+    class ActiveSupport::IntegrationCase < ActiveSupport::TestCase
+    include Capybara::DSL
+    include Rails.application.routes.url_helpers
+    end
+
+> 添加依赖到Gemfile里
+
+    group :test do
+    gem 'capybara', '~> 2.0.0'
+    end
+
+> 最后编写测试创建他然后渲染他
+
+    templater/2_improving/test/integration/cms_test.rb
+    require 'test_helper'
+    class CmsTest < ActiveSupport::IntegrationCase
+    test "can access any page in SqlTemplate" do
+    visit "/sql_templates"
+    click_link "New Sql template"
+    fill_in
+    fill_in
+    fill_in
+    fill_in
+    fill_in
+    "Body",
+    "Path",
+    "Format",
+    "Locale",
+    "Handler",
+    with:
+    with:
+    with:
+    with:
+    with:
+    "My first CMS template"
+    "about"
+    "html"
+    "en"
+    "erb"
+    click_button "Create Sql template"
+    assert_match "Sql template was successfully created.", page.body
+    visit "/cms/about"
+    assert_match "My first CMS template", page.body
+    end
+    end
+
+> 编写路由
+
+    templater/2_improving/config/routes.rb
+    get "cms/*page", to: "cms#respond"
+
+> 将路由全部映射到/cms/*对应的respond()方法 我们需要按照下面实现
+
+    templater/2_improving/app/controllers/cms_controller.rb
+    class CmsController < ApplicationController
+    prepend_view_path SqlTemplate::Resolver.instance
+    def respond
+    render template: params[:page]
+    end
+    end
+
+> 我们将给定的路由作为模板的名字，转发给我们的SqlTemplate::Resolver，用来查找模板
+
+> 如果你想测试我们的cms以手动形式，启动服务器，访问sql_templates，创建一个新的模板，path值是about，添加一些内容，访问/cms/about 你会看到新页面
+
+
+###### Playing with Metal
+
+> 我们的cmsController继承自ApplicationController,而它继承自ActionCon-troller::Base，因此，它附带了常规Rails控制器中可用的所有功能。
+> 包含了所有帮助方法，跨域请求保护，允许我们使用hide_action隐藏actions，添加flash messges支持，添加respond_to()方法，和许多方法，超过我们仅仅需要处理一个get请求所需要的
+> 如果我们能有一个更简单的控制器，只需要我们所需要的行为，那不是很好吗？
+
+> 我们已经讨论有关抽象控制器和它怎样提供基础结构在Action Mailer 和 Action Controller
+> 中被分享，然而AbstractController::Base不知道任何有关http,换句话说，ActionController::Base就是一个单独整体，中间难道没有其他么？
+
+> 的确有，叫做ActionController::Meta，ActionController::Metal继承AbstractController::Base，实现了最基本的使我们的控制器成为一个有效程序栈的处理http的功能，继承图如下
+
+![](07.png)
+
+
+> 通过快速查看，ActionController::Base 源码，我们注意到它继承自Metal并且加入了一些行为
+
+    /actionpack/lib/action_controller/base.rb
+    module ActionController
+    class Base < Metal
+    abstract!
+    include AbstractController::Layouts
+    include  AbstractController::Translation
+    include AbstractController::AssetPaths
+    include Helpers
+    include  HideActions
+    include UrlFor
+    include  Redirecting
+    include Rendering
+    include Renderers::All
+    include ConditionalGet
+    include RackDelegation
+    include Caching
+    include MimeResponds
+    include ImplicitRender
+    include StrongParameters
+    ...
+
+> 让我们重新实现 CmsController,但是这次我们继承 ActionController::Metal，并且仅仅引入我们需要的木块，减少一个请求的开销
+
+    templater/3_final/app/controllers/cms_controller.rb
+      class CmsController < ActionController::Metal
+      include ActionController::Rendering
+      include AbstractController::Helpers
+      prepend_view_path ::SqlTemplate::Resolver.instance
+      helper CmsHelper
+      def respond
+      render template: params[:page]
+      end
+      end
+      module CmsHelper
+      end
+  
+> 如果我们需要更多功能，我们就required模块，例如，我们想要添加布局，就include  AbstractController::Layouts模块，创建一个布局文件在数据库中， path为layouts/cms 
+>并且在控制器中指定 layout "cms"
