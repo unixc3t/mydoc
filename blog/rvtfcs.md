@@ -466,33 +466,33 @@
 
 >让我们开始这个改变，首先需要引入单例模块
 
-    templater/2_improving/app/models/sql_template.rb
+    templater/app/models/sql_template.rb
     require "singleton"
     include Singleton
 
 > 做完这个简单的改变之后，我们需要更新app/controllers/users_controller.rb 个test/models/sql_template_test.rb来调用SqlTemplate::Resolver.instance()方法替代
 > SqlTemplate::Resolver.new()
 
-    templater/2_improving/app/controllers/users_controller.rb
-    append_view_path SqlTemplate::Resolver.instance
-    templater/2_improving/test/models/sql_template_test.rb
-    resolver = SqlTemplate::Resolver.instance
+    templater/app/controllers/users_controller.rb
+      append_view_path SqlTemplate::Resolver.instance
+
+    templater/test/models/sql_template_test.rb
+      resolver = SqlTemplate::Resolver.instance
 
 > 在这些地方使用单例解析器，我们编写一个测试在est/models/sql_template_test.rb文件里
 > 然后判断我们的缓存在适当的时候过期，这个新的测试应该更新来自fixture的SqlTemplate，并且判断应该返回更新后的模板
 
       templater/2_improving/test/models/sql_template_test.rb
-      test "sql_template expires the cache on update" do
-      cache_key = Object.new
-      resolver = SqlTemplate::Resolver.instance
-      details
-      = { formats: [:html], locale: [:en], handlers: [:erb] }
-      t = resolver.find_all("index", "users", false, details, cache_key).first
-      assert_match "Listing users", t.source
-      sql_template = sql_templates(:users_index)
-      sql_template.update_attributes(body: "New body for template")
-      t = resolver.find_all("index", "users", false, details, cache_key).first
-      assert_equal "New body for template", t.source
+      test 'sql_template expires the cache on update' do
+        cache_key = Object.new
+        resolver = SqlTemplate::Resolver.instance
+        details = { formats: [:html], locale: [:en], handlers: [:erb] }
+        t = resolver.find_all('index', 'users', false, details, cache_key).first
+        assert_match 'Listing users', t.source
+        sql_template = sql_templates(:users_index)
+        sql_template.update_attributes(body: 'New body for template')
+        t = resolver.find_all('index', 'users', false, details, cache_key).first
+        assert_equal 'New body for template', t.source
       end
 
 > 注意我们生成一个伪装cache_key，将Object.new传递给find_all()方法，只有一个缓存key被提供，缓存才有效
@@ -500,10 +500,10 @@
 > 最后,为了使我们的测试通过，我们添加一个after_save回调到SqlTemplate里面，
 
 
-    templater/2_improving/app/models/sql_template.rb
-    after_save do
-    SqlTemplate::Resolver.instance.clear_cache
-    end
+    templater/app/models/sql_template.rb
+      after_save do
+        SqlTemplate::Resolver.instance.clear_cache
+      end
 
 > 现在，每次模板被创建或者更新,缓存都会过期，允许修改选择的模板并且重新编译，不幸的是，
 > 这个方案有一个严重的限制， 它只适用于单个实例部署。，例如，如果你底层包含多个服务器或者你使用Passenger 或 Unicorn有一个实例池，一个请求将会得到一个指定实例，仅有它自己的缓存被清理，换句话说，在机器之间，缓存不是同步的
@@ -530,70 +530,60 @@
 
 > 我们用几行代码来实现这个功能， 我们使用capybara编写一个集成测试， 设置capybara
 
-    templater/2_improving/test/test_helper.rb
+    templater/test/test_helper.rb
     require "capybara"
     require "capybara/rails"
+
     # Define a bare test case to use with Capybara
-    class ActiveSupport::IntegrationCase < ActiveSupport::TestCase
-    include Capybara::DSL
-    include Rails.application.routes.url_helpers
-    end
+      class ActiveSupport::IntegrationCase < ActiveSupport::TestCase
+        include Capybara::DSL
+        include Rails.application.routes.url_helpers
+      end
 
 > 添加依赖到Gemfile里
 
     group :test do
-    gem 'capybara', '~> 2.0.0'
+      gem 'capybara', '~> 2.0.0'
     end
 
 > 最后编写测试创建他然后渲染他
 
-    templater/2_improving/test/integration/cms_test.rb
+    templater/test/integration/cms_test.rb
     require 'test_helper'
+
     class CmsTest < ActiveSupport::IntegrationCase
-    test "can access any page in SqlTemplate" do
-    visit "/sql_templates"
-    click_link "New Sql template"
-    fill_in
-    fill_in
-    fill_in
-    fill_in
-    fill_in
-    "Body",
-    "Path",
-    "Format",
-    "Locale",
-    "Handler",
-    with:
-    with:
-    with:
-    with:
-    with:
-    "My first CMS template"
-    "about"
-    "html"
-    "en"
-    "erb"
-    click_button "Create Sql template"
-    assert_match "Sql template was successfully created.", page.body
-    visit "/cms/about"
-    assert_match "My first CMS template", page.body
-    end
+      test "can access any page in SqlTemplate" do
+        visit "/sql_templates"
+        click_link "New Sql Template"
+
+        fill_in "Body",    with: "My first CMS template"
+        fill_in "Path",    with: "about"
+        fill_in "Format",  with: "html"
+        fill_in "Locale",  with: "en"
+        fill_in "Handler", with: "erb"
+
+        click_button "Create Sql template"
+        assert_match "Sql template was successfully created.", page.body
+
+        visit "/cms/about"
+        assert_match "My first CMS template", page.body
+      end
     end
 
 > 编写路由
 
-    templater/2_improving/config/routes.rb
+    templater/config/routes.rb
     get "cms/*page", to: "cms#respond"
 
 > 将路由全部映射到/cms/*对应的respond()方法 我们需要按照下面实现
 
-    templater/2_improving/app/controllers/cms_controller.rb
-    class CmsController < ApplicationController
-    prepend_view_path SqlTemplate::Resolver.instance
-    def respond
-    render template: params[:page]
-    end
-    end
+    templater/app/controllers/cms_controller.rb
+      class CmsController < ApplicationController
+        prepend_view_path SqlTemplate::Resolver.instance
+          def respond
+             render template: params[:page]
+          end
+      end
 
 > 我们将给定的路由作为模板的名字，转发给我们的SqlTemplate::Resolver，用来查找模板
 
@@ -617,38 +607,42 @@
 > 通过快速查看，ActionController::Base 源码，我们注意到它继承自Metal并且加入了一些行为
 
     /actionpack/lib/action_controller/base.rb
-    module ActionController
-    class Base < Metal
-    abstract!
-    include AbstractController::Layouts
-    include  AbstractController::Translation
-    include AbstractController::AssetPaths
-    include Helpers
-    include  HideActions
-    include UrlFor
-    include  Redirecting
-    include Rendering
-    include Renderers::All
-    include ConditionalGet
-    include RackDelegation
-    include Caching
-    include MimeResponds
-    include ImplicitRender
-    include StrongParameters
-    ...
+      module ActionController
+      class Base < Metal
+      abstract!
+
+      include AbstractController::Layouts
+      include  AbstractController::Translation
+      include AbstractController::AssetPaths
+      include Helpers
+      include  HideActions
+      include UrlFor
+      include  Redirecting
+      include Rendering
+      include Renderers::All
+      include ConditionalGet
+      include RackDelegation
+      include Caching
+      include MimeResponds
+      include ImplicitRender
+      include StrongParameters
+      ...
 
 > 让我们重新实现 CmsController,但是这次我们继承 ActionController::Metal，并且仅仅引入我们需要的木块，减少一个请求的开销
 
-    templater/3_final/app/controllers/cms_controller.rb
+    templaterapp/controllers/cms_controller.rb
       class CmsController < ActionController::Metal
-      include ActionController::Rendering
-      include AbstractController::Helpers
-      prepend_view_path ::SqlTemplate::Resolver.instance
-      helper CmsHelper
-      def respond
-      render template: params[:page]
+        include ActionController::Rendering
+        include AbstractController::Helpers
+
+        prepend_view_path ::SqlTemplate::Resolver.instance
+        helper CmsHelper
+          
+          def respond
+            render template: params[:page]
+          end
       end
-      end
+        
       module CmsHelper
       end
   
