@@ -4,7 +4,7 @@
 
 ###### 3.1 Revisiting the Rendering Stack
 
-> 前面涨价。我们看到rails控制器渲染栈主要职责是格式化选项，将他们发送给ActionView::Render,当被调用时候，render接收到一个ActionView::Base实例，通过view context，和一个hash参数，找到编译渲染制定模板
+> 前面章节，我们看到rails控制器渲染栈主要职责是格式化选项，将他们发送给ActionView::Render,当被调用时候，render接收到一个ActionView::Base实例，通过view context，和一个hash参数，找到编译渲染制定模板
 
     view_renderer.render(view_context, options)
 
@@ -47,7 +47,7 @@
     $ rails generate scaffold SqlTemplate body:text path:string \
     format:string locale:string handler:string partial:boolean
 
-> body属性是一个text字段，用来存储整个模板，path存储类似文件系统路径。(例如 UserController控制下下的index()方法，users/index作为path)，format和local存储木办个事和本地变量， handler存储模板处理器(erb,haml),最后整个partial告诉我们整个模板是否是一个局部模板
+> body属性是一个text字段，用来存储整个模板，path存储类似文件系统路径。(例如 UserController控制下下的index()方法，users/index作为path)，format和local存储请求格式和本地变量， handler存储模板处理器(erb,haml),最后整个partial告诉我们整个模板是否是一个局部模板
 
 > 在执行migration之前，我们做一个改变，设置partial默认值是false
 
@@ -112,7 +112,7 @@
 
 
 > 我们声明解析器为SqlTemplate::Resolver 并且采用三步实现它
-> 首先接收name, prefix partial 和details作为参数并且格式化他们，然后我们根据格式化的参数，创建一个sql语句，查询数据库，最后一部，将数据库得到的记录转换成 ActionView::Template实例返回
+> 首先接收name, prefix partial 和details作为参数并且格式化他们，然后我们根据格式化的参数，创建一个sql语句，查询数据库，最后一步，将数据库得到的记录转换成 ActionView::Template实例返回
 
 > 我们首先编写一个测试
 
@@ -175,53 +175,60 @@
       validates :format, inclusion: Mime::SET.symbols.map(&:to_s)
       validates :locale, inclusion: I18n.available_locales.map(&:to_s)
       validates :handler, inclusion:
-      ActionView::Template::Handlers.extensions.map(&:to_s)
+        ActionView::Template::Handlers.extensions.map(&:to_s)
+
       class Resolver < ActionView::Resolver
-      protected
-      def find_templates(name, prefix, partial, details)
-      conditions = {
-      path: normalize_path(name, prefix),
-      locale: normalize_array(details[:locale]).first,
-      format: normalize_array(details[:formats]).first,
-      handler: normalize_array(details[:handlers]),
-      partial: partial || false
-      }
-      ::SqlTemplate.where(conditions).map do |record|
-      initialize_template(record)
-      end
-      end
-      # Normalize name and prefix, so the tuple ["index", "users"] becomes
-      # "users/index" and the tuple ["template", nil] becomes "template".
-      def normalize_path(name, prefix)
-      prefix.present? ? "#{prefix}/#{name}" : name
-      end
-      # Normalize arrays by converting all symbols to strings.
-      def normalize_array(array)
-      array.map(&:to_s)
+        protected
+        
+        def find_templates(name, prefix, partial, details)
+          conditions = {
+            path: normalize_path(name, prefix),
+            locale: normalize_array(details[:locale]).first,
+            format: normalize_array(details[:formats]).first,
+            handler: normalize_array(details[:handlers]),
+            partial: partial || false
+          }
+
+        ::SqlTemplate.where(conditions).map do |record|
+              initialize_template(record)
+        end
       end
 
+      # Normalize name and prefix, so the tuple ["index", "users"] becomes
+      # "users/index" and the tuple ["template", nil] becomes "template".
+      
+        def normalize_path(name, prefix)
+            prefix.present? ? "#{prefix}/#{name}" : name
+        end
+      
+      # Normalize arrays by converting all symbols to strings.
+        def normalize_array(array)
+          array.map(&:to_s)
+        end
+
       # Initialize an ActionView::Template object based on the record found.
-      def initialize_template(record)
-      source = record.body
-      identifier = "SqlTemplate - #{record.id} - #{record.path.inspect}"
-      handler = ActionView::Template.registered_template_handler(record.handler)
-      details = {
-      format: Mime[record.format],
-      updated_at: record.updated_at,
-      virtual_path: virtual_path(record.path, record.partial)
-      }
-      ActionView::Template.new(source, identifier, handler, details)
-      end
-      # Make paths as "users/user" become "users/_user" for partials.
-      def virtual_path(path, partial)
-      return path unless partial
-      if index = path.rindex("/")
-      path.insert(index + 1, "_")
-      else
-      "_#{path}"
-      end
-      end
-      end
+        def initialize_template(record)
+          source = record.body
+          identifier = "SqlTemplate - #{record.id} - #{record.path.inspect}"
+          handler = ActionView::Template.registered_template_handler(record.handler)
+          details = {
+            format: Mime[record.format],
+            updated_at: record.updated_at,
+            virtual_path: virtual_path(record.path, record.partial)
+          }
+          ActionView::Template.new(source, identifier, handler, details)
+        end
+
+        # Make paths as "users/user" become "users/_user" for partials.
+        def virtual_path(path, partial)
+          return path unless partial
+          if index = path.rindex("/")
+            path.insert(index + 1, "_")
+          else
+            "_#{path}"
+          end
+        end
+        end
       end
 
 > 我们实现了格式化给定的参数，查询数据库，从结果集创建模板对象，我们也添加了对我们model的验证，确保body和path值不为空，确保是一个有效的格式
