@@ -42,3 +42,72 @@
 > markdown不能解释ruby代码，为了绕过这个，我们必须使用erb编译我们的模板， 然后使用markdown编译器传唤他们。
 
 > 本章最后我们将配置rails生成器使用新的模板处理器作为默认。
+
+#### 4.1 Playing with the Template-Handler API
+
+> 一个对象兼容 handler api，它需要响应call()方法，这个方法接收一个ActionView::Template实例作为参数,ActionView::Template是我们在writing the code那节引入的，call方法返回一个字符串包含了有效的ruby code，处理器返回的ruby代码被编译成一个方法，渲染一个模板和调用一个方法一样
+
+> 在开始我们的Markdown+ERB处理器之前，我们创建一个模板处理器认识一下这个api
+
+##### Ruby Template Handler
+
+> 我们第一个模板处理器允许任意的ruby代码作为一个模板，这意思是下面的模板是有效的
+ 
+    body = ""
+    body << "This is my first "
+    body << content_tag(:b, "template handler")
+    body << "!"
+    body
+
+
+> 为了实现这个，我们创建一个叫做handlers的rails插件
+
+    $ rails plug-in new handlers
+
+> 下一步我们编写一个集成测试，测试我们的模板处理器，我们的目标是渲染test/dummy/app/views/handlers/rb_handler.html.rb
+
+    handlers/test/dummy/app/views/handlers/rb_handler.html.rb
+    body = ""
+    body << "This is my first "
+    body << content_tag(:b, "template handler")
+    body << "!"
+    body
+
+> 我们的集成测试需要路由器和控制器服务于模板，让我们添加
+
+    handlers/test/dummy/config/routes.rb
+    Dummy::Application.routes.draw do
+     get "/handlers/:action", to: "handlers"
+    end
+
+    handlers/test/dummy/app/controllers/handlers_controller.rb
+      class HandlersController < ApplicationController
+    end
+
+> 我们的集成测试,应该发送一个请求根据路由/handlers/rb_handler 并且断言模板被渲染
+    require "test_helper"
+    class RenderingTest < ActionDispatch::IntegrationTest
+      test ".rb template handler" do
+        get "/handlers/rb_handler"
+        expected = "This is my first <b>template handler</b>!"
+        assert_match expected, response.body
+      end
+    end
+
+
+> 当我们运行测试的时候，失败了，因为rails仍然无法识别.rb扩展模板，注册一个新的模板处理器，我们调用ActionView::Template.register_template_handler()，传递两个参数，模板扩展和处理器对象。
+>处理器对象可以是任何只要可以响应call()方法和返回字符串， 我们可以使用lambda简单实现一个处理器
+
+      handlers/1_first_handlers/lib/handlers.rb
+      require "action_view/template"
+        ActionView::Template.register_template_handler :rb,
+          lambda { |template| template.source }
+
+      module Handlers
+      end
+  
+> 当我们运行这个测试时，我们刚刚写的测试现在通过了。我们的lambda表达式接收一个ActionView::Template实例作为桉树，因为我们的模板处理器返回一个String包含ruby代码，我们的模板使用ruby代码写的，我们仅仅需要返回template.source().
+
+> ruby的symbols实现了一个to_proc方法并且:source.to_pro和lambda { |arg| arg.source }一样，所以我们可以将模板处理器写的更短
+
+    ActionView::Template.register_template_handler :rb, :source.to_proc
