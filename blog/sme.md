@@ -111,3 +111,50 @@
 > ruby的symbols实现了一个to_proc方法并且:source.to_pro和lambda { |arg| arg.source }一样，所以我们可以将模板处理器写的更短
 
     ActionView::Template.register_template_handler :rb, :source.to_proc
+
+
+###### String Template Handler
+
+> 我们的.rb模板处理器十分简单，但是功能有限,rails views通常有和很多静态内容,使用ruby代码处理这些变得十分麻烦，我们来实现另一个模板处理器,更合适处理这些静态内容,但是仍然允许我们内嵌ruby代码,因为string在ruby中支持插值写法，我们的下一个模板将会基于ruby字符串，让我们添加一个模板到dummy app里，
+
+    handlers/test/dummy/app/views/handlers/string_handler.html.string
+    Congratulations! You just created another #{@what}!
+
+> 我们的新模板使用字符串插值, 并且被插入的ruby代码引用一个实例变量叫做@what, 让我们定义一个新的action，并且包含这个实例变量在我们的HandlersController控制器里，作为一个fixture
+
+    handlers/test/dummy/app/controllers/handlers_controller.rb
+    class HandlersController < ApplicationController
+      def string_handler
+        @what = "template handler"
+      end
+    end
+
+> 让我们编写一个简单的测试
+
+    handlers/test/integration/rendering_test.rb
+    test ".string template handler" do
+      get "/handlers/string_handler"
+        expected = "Congratulations! You just created another template handler!"
+        assert_match expected, response.body
+      end
+
+> 为了使我们测试通过,我们实现这个模板处理器，在lib/handlers.rb中
+
+    handlers/lib/handlers.rb
+    ActionView::Template.register_template_handler :string,
+    lambda { |template| "%Q{#{template.source}}" }
+
+> 运行这个测试，通过了，我们的模板处理器返回了一个使用ruby短写%Q{}创建的字符串，rails将它编译成一个方法，当方法被调用时,ruby解释器执行这个字符串，返回插入的值的结果
+
+> 模板的处理器对于简单例子工作很好,但是有两个缺点，加入“}”字符到模板会引起语法错误,除非字符被转义
+>同时，代码块支持有限,因为需要被包装到整个插值语法里， 这意味这下面两个引起错误
+
+    This } causes a syntax error
+    #{2.times do}
+    This does not work as in ERB and is invalid
+    #{end}
+
+> 是时候看一个更健壮的模板处理器了
+
+
+#### 4.2 Building a Template Handler with Markdown + ERB
