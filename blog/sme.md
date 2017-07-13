@@ -158,3 +158,37 @@
 
 
 #### 4.2 Building a Template Handler with Markdown + ERB
+
+> 有几个gem可以将markdown语法编译成html.对于我们的模板处理器,我们使用RDiscount，一个ruby包装的快速的markdown编译库，叫做Discount,使用C语言编写
+
+###### Markdown Template Handler
+
+> 我们可以创建一个模板处理器来编译markdown，仅仅需要几行代码，我们加入一个测试
+
+    handlers/test/integration/rendering_test.rb
+    test ".md template handler" do
+      get "/handlers/rdiscount"
+      expected = "<p>RDiscount is <em>cool</em> and <strong>fast</strong>!</p>"
+      assert_match expected, response.body
+    end
+
+> 然后我们编写我们的模板保存在文件系统上
+
+    handlers/test/dummy/app/views/handlers/rdiscount.html.md
+    RDiscount is *cool* and **fast**!
+
+> 注意了。现在我们的模板是.md扩展名,我们注册一个处理器
+
+    handlers/1_first_handlers/lib/handlers.rb
+    require "rdiscount"
+    ActionView::Template.register_template_handler :md,
+    lambda { |template| "RDiscount.new(#{template.source.inspect}).to_html" }
+
+> 因为我们的模板处理器依赖于RDiscount,让我们添加一个依赖到我们的插件中
+
+    handlers/handlers.gemspec
+    s.add_dependency "rdiscount", "~> 2.0.0"
+
+> 当我们运行测试，通过了，我们的markdown模板处理器很奏效，但是它不允许我们内嵌ruby代码,所以使用上还是有一点限制,
+
+>为了解决这个限制,我们可以使用在我们.string模板处理器使用的技术，但是也有限制，因此,我们使用erb嵌入ruby代码在我们的markdown模板里，我们创建一个新的handler处理器叫做merb.
