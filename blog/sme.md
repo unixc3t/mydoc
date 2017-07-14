@@ -246,3 +246,78 @@
     puts(a=1;b=a+1)# => raises syntax error
     puts(begin;a=1;b=a+1;end) # => prints 2 properly
 
+
+#### Multipart Emails
+
+> 我们将在 Action Mailer中使用多部分emails，来展示我们加入模板处理器的行为，让我们创建一个mailer在虚拟程序里，用于我们的测试使用
+
+    handlers/2_final/test/dummy/app/mailers/notifier.rb
+    class Notifier < ActionMailer::Base
+      def contact(recipient)
+        @recipient = recipient
+        mail(to: @recipient, from: "john.doe@example.com") do |format|
+          format.text
+          format.html
+        end
+      end
+    end
+
+> 代码看起来很熟悉，就像控制器里的respond_to()，你可以传递一个代码块给mail，指定需要渲染的模板， 然而在控制器里，rails只选择一个模板进行渲染，然而在邮件代码块中，指定的几个模板用来创建一个多部分email
+
+> 我们的email有两部分，一个分普通text，另一部分是html, 因为两部分使用同一个模板，让我们在虚拟app里创建一个模板，不向文件名添加格式
+
+    handlers/test/dummy/app/views/notifier/contact.merb
+    Dual templates **rock**!
+
+> 编写一个测试
+
+    handlers/test/integration/rendering_test.rb
+    test "dual template with .merb" do
+      email = Notifier.contact("you@example.com")
+
+      assert_equal 2, email.parts.size
+      assert_equal "multipart/alternative", email.mime_type
+      assert_equal "text/plain", email.parts[0].mime_type
+      assert_equal "Dual templates **rock**!",
+
+      email.parts[0].body.encoded.strip
+      assert_equal "text/html", email.parts[1].mime_type
+      assert_equal "<p>Dual templates <strong>rock</strong>!</p>",
+      email.parts[1].body.encoded.strip
+    end
+
+>测试断言分为两部分，因为文本部分是html部分的备用版本，所以email应该有一个MIME类型等于multipart/alternative,会被Action Mailer自动设置,测试通过检查MIME type和每个部分的body
+> 这两部分的顺序也很重要，如果这两部分都被转化，大多数客户端会忽略html部分，选择展示text部分
+
+> 当我们运行测试，失败了，因为我们的text/plain部分包含了html代码，不是只包含plain text，这是我们意料之中，因为我们的模板处理器总是返回html代码， 为了使测试通过，我们需要细微的改变Handlers::MERB.call()实现对模板格式的处理
+
+    handlers/lib/handlers.rb
+      def self.call(template)
+        compiled_source = erb_handler.call(template)
+        if template.formats.include?(:html)
+          "RDiscount.new(begin;#{compiled_source};end).to_html"
+        else
+          compiled_source
+      end
+    end
+
+> 我们检查template.formats和是否包含：html格式，如果包含。我们将模板作为html渲染，否则我们返回erb编译后的代码，结果是用markdown语法编写的text模板，这样就允许我们发送一个邮件使用text和html两部分，同时使用一个模板
+
+
+> 随着最后的修改,偶们的模板处理器做到我们前面计划的那样，在我们为我们的模板创建生成器之前，我们讨论一下template.format的设置
+
+
+###### Formats Lookup
+
+> 在writting the code那节，我们讨论了解析器扶着传递：format选项给模板，解析器按照下面查找方式决定使用哪种格式
+
+1. 如果模板被找到自身有一个有效格式就使用, 模板位于文件系统中，格式被指定名字一部分，例如index.html.erb
+
+2. 如果木本被找到，但是没有指定一个格式，解析器询问模板处理器时候有一个默认格式
+
+3. 如果模板处理器没有首选格式，则解析器应该返回查找中使用的格式相同。
+
+> 因为我们的contact.merb模板没有指定一个格式，所有解析器尝试获取默认格式，从我们的Handlers::MERB模板处理器里，这个默认格式通过Handlers::MERB.default_format()方法得到
+> 但是因为我们的模板处理器不能影响default_format()方法，所以第二步查找也跳过，解析器最后的选项是返回查找中使用的格式,作为们正使用format.text和format.html方法，他们自动被设置成查找的格式text和html.
+
+> 例如，如果我们定义Handler::MERB.default_foramt()并且实现它，返回:text或者:html，我们的测试将会失败，我们的解析器永远不会达到第三步，在第二步的时候就会返回一个指定的格式.
