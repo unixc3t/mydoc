@@ -192,3 +192,57 @@
 > 当我们运行测试，通过了，我们的markdown模板处理器很奏效，但是它不允许我们内嵌ruby代码,所以使用上还是有一点限制,
 
 >为了解决这个限制,我们可以使用在我们.string模板处理器使用的技术，但是也有限制，因此,我们使用erb嵌入ruby代码在我们的markdown模板里，我们创建一个新的handler处理器叫做merb.
+
+#### MERB Template Handler
+
+> 首先，我们添加一个新的模板处理器示例到我们的文件系统上，这个例子应该在我们的虚拟app里，我们在我们的test里使用它
+
+    handlers/test/dummy/app/views/handlers/merb.html.merb
+    MERB template handler is **<%= %w(cool fast).to_sentence %>**!
+
+> 让我们编写一个测试，检查我们的输出
+
+    handlers/test/integration/rendering_test.rb
+    test ".merb template handler" do
+      get "/handlers/merb"
+      expected = "<p>MERB template handler is <strong>cool and fast</strong>!</p>"
+      assert_match expected, response.body.strip
+    end
+
+> 这次实现我们的处理器没有使用lambda,作为替代，我们创建了一个模块，响应call()方法，允许将我们的实现分割成更小的方法，为了编译erb，我们简单的使用了erb处理器，我们可以通过ActionView::Tem
+> plate.registered_template_handler()方法得到这个erb处理器
+
+    handlers/1_first_handlers/lib/handlers.rb
+    module Handlers
+        module MERB
+        def self.erb_handler
+        @@erb_handler ||= ActionView::Template.registered_template_handler(:erb)
+        end
+        
+        def self.call(template)
+        compiled_source = erb_handler.call(template)
+        "RDiscount.new(begin;#{compiled_source};end).to_html"
+        end
+      end
+    end
+    ActionView::Template.register_template_handler :merb, Handlers::MERB
+
+> erb处理器编译这个模板，像其他模板处理器一样，这些有效的ruby，返回一个字符串，返回的结果是包含markdown的字符串，可以使用Rdiscount转换成html
+
+> 最后，看一下我们怎样包装由erb返回的，在begin/end中内联的代码，我们不得不使用内联，否则它会搞乱回朔。 例如，下面模板
+
+    <% nil.this_method_does_not_exist! %>
+
+> 上面代码会跑出错误，在渲染的时候，然而，考虑到两种方式编译这个模板
+
+    RDiscount.new(begin
+      nil.this_method_does_not_exist!
+    end).to_html
+    RDiscount.new(begin;nil.this_method_does_not_exist!;end).to_html
+
+
+> 第一个例子,因为我们在编译模板中引入了新行，异常回朔会提示说错误发生在第二行,这回让人迷惑，注意我们也需要使用begin / end包装代码，否则我们的处理器将会生成无效的ruby代码，如果包含多个ruby表达式的时候， 我们通过irb进行一下验证
+
+    puts(a=1;b=a+1)# => raises syntax error
+    puts(begin;a=1;b=a+1;end) # => prints 2 properly
+
