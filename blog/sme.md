@@ -321,3 +321,34 @@
 > 但是因为我们的模板处理器不能影响default_format()方法，所以第二步查找也跳过，解析器最后的选项是返回查找中使用的格式,作为们正使用format.text和format.html方法，他们自动被设置成查找的格式text和html.
 
 > 例如，如果我们定义Handler::MERB.default_foramt()并且实现它，返回:text或者:html，我们的测试将会失败，我们的解析器永远不会达到第三步，在第二步的时候就会返回一个指定的格式.
+
+
+
+
+#### 4.3 Customizing Rails Generators
+
+> 使用我们手上的模板处理器，渲染多部分邮件，最后一个步骤是给插件创建一个生成器, 我们的生成器将会钩入rails的邮件生成器,配置它成成.merb替代erb模板。
+
+> rails生成器提供了回调入口,允许其他生成器扩展和定制生成的代码,快速的看一下邮件生成器源码
+
+    rails/railties/lib/rails/generators/rails/mailer/mailer_generator.rb
+    module Rails
+      module Generators
+        class MailerGenerator < NamedBase
+          source_root File.expand_path("../templates", __FILE__)
+          argument :actions, type: :array,
+          default: [], banner: "method method"
+          check_class_collision
+          def create_mailer_file
+            template "mailer.rb",
+            File.join("app/mailers", class_path, "#{file_name}.rb")
+         end
+        hook_for :template_engine, :test_framework
+        end
+      end
+    end
+
+> 虽然我们不能覆盖整个生成器api，我们看到他主要行为是拷贝一个邮件模板到app/mailers
+> 实现方法在create_mailer_file()里，注意，这歌邮件生成器不会告诉任何关于模板引擎和测试框架，它仅仅提供了回调，这就允许了其他库，像haml和rspec会进入mailer 神撑起，定制生成过程。
+
+
