@@ -416,3 +416,23 @@
 > 最后,mailer生成器提供两个回调,一个是模板引擎,另一个是测试框架, 这些回调变成选项，可以通过命令行传递， 生成器允许接收一组参数和选项如下所示
 
     $ rails g mailer Notifier welcome contact --test-framework=rspec
+
+  
+#### Generators’ Hooks
+
+> 我们已经知道了rails生成器提供回调，然而当我们要求ERB作为模板引擎使用的时候, 邮件生成器是什么知道它并且找到它并使用的呢？ 生成器的回调工作感谢约定配置，当你选择模板引擎叫做:erb时，Rails::Generators::MailerGenerator会尝试读取下面三种生成器的一个
+
+      • Rails::Generators::ErbGenerator
+      • Erb::Generators::MailerGenerator
+      • ErbGenerator
+  
+> 所有的生成器都在$LOAD_PATH下，在rails/grenerators或者generators目录里，找到这些生成器最简单的方式就是require下面这些文件
+
+      (rails/)generators/rails/erb/erb_generator
+      (rails/)generators/rails/erb_generator
+      (rails/)generators/erb/mailer/mailer_generator
+      (rails/)generators/erb/mailer_generator
+      (rails/)generators/erb/erb_generator
+      (rails/)generators/erb_generator
+
+> 如果这些生成器其中一个被找到,通过命令行传递给mailer generator的参数同样传递给这个生成器，在这个例子中生成器 Erb::Generators::MailerGenerator 我们下节讨论
