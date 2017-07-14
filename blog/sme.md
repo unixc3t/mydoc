@@ -336,14 +336,17 @@
       module Generators
         class MailerGenerator < NamedBase
           source_root File.expand_path("../templates", __FILE__)
-          argument :actions, type: :array,
-          default: [], banner: "method method"
+
+          argument :actions, type: :array,default: [], banner: "method method"
+
           check_class_collision
+
           def create_mailer_file
             template "mailer.rb",
             File.join("app/mailers", class_path, "#{file_name}.rb")
-         end
-        hook_for :template_engine, :test_framework
+          end
+
+          hook_for :template_engine, :test_framework
         end
       end
     end
@@ -352,3 +355,64 @@
 > 实现方法在create_mailer_file()里，注意，这歌邮件生成器不会告诉任何关于模板引擎和测试框架，它仅仅提供了回调，这就允许了其他库，像haml和rspec会进入mailer 神撑起，定制生成过程。
 
 
+###### A Generator’s Structure
+
+> 了解生成器是如何工作的,我们深入看一下Rails::Generators::MailerGenerator源码。
+> 这个生成器继承了Rails::Generators::NamedBase，所有的生成器继承它，并且期望一个参数叫做NAME，当生成器从命令行被调用的时候，我们可以验证参数和选项通过执行下面的命令
+
+    $ rails g mailer --help
+    Usage:
+      rails generate mailer NAME [method method] [options]
+
+    Options:
+      -e, [--template-engine=NAME] # Template engine to be invoked
+                                # Default: erb
+      -t, [--test-framework=NAME]  # Test framework to be invoked
+                                # Default: test_unit
+
+
+
+>回到我们生成器代码,Rails::Generators::MailerGenerator类定义了:actions作为参数
+>在第6行. 因为提供了一个默认值(空数组)，这些actions是可选的，方括号里的是帮助信息
+
+> 下一步我们调用class_collisions_check()方法，验证给予生成的的NAME是不是已经存在我们的applicaitons里，如果我们已经定义了一个同名的mailer就会跑出一个错误
+
+> 下一行我们定义了一个create_mailer_file()方法。
+
+    def create_mailer_file
+      template "mailer.rb",
+      File.join("app/mailers", class_path, "#{file_name}.rb")
+    end
+
+> rails生成器，按照这些公共方法定义的顺序调用，这种结构很有趣，因为可以和继承很好的集合,如果你想继承了mailer生成器做了一些扩展，你仅仅需要继承它，定义一些public 方法，跳过任务是一些未定义的方法，无论何时你的新的生成器被调用,他都会执行继承的方法，然后执行你定义的新的public 方法，如同控制器，您可以通过声明一个公开的方法来使用
+
+> create_mailer_file()方法会调用三个方法，template() , class_path()和file_name()，第一个方法是thor里的帮助方法，是生成器基础, 其他两个定义在Rails::Generators::NamedBase里
+
+> thor有一个模块叫做Thor::Actions，包含一些方法可以在生成任务中使用,他们其中一个就是前面讨论的template()方法， 允许接收两个参数:源文件和目标位置
+
+
+> template()方法从文件系统读取源文件,使用ERB执行内嵌的ruby代码,拷贝结果到给定的目标位置, 在Thor中所有的erb模板都会被执行，在生成器的上下文中,这就意味着在生成器中定义的实例变量可以在你的模板中使用, 如通在proteced/private方法里一样
+
+> 通过class_path和file_name方法返回的值，受到NAME参数值影响, 查看素有定义的方法和他们的返回值，让我们看named_base_test.rb文件源码
+
+    def test_named_generator_attributes
+      
+      g = generator ['admin/foo']
+      assert_name g, 'admin/foo', :name
+      assert_name g, %w(admin), :class_path
+      assert_name g, 'admin/foo', :file_path
+      assert_name g, 'foo', :file_name
+      assert_name g, 'Foo', :human_name
+
+      assert_name g, 'foo', :singular_name
+      assert_name g, 'foos', :plural_name
+      assert_name g, 'admin.foo', :i18n_scope
+      assert_name g,  'admin_foos', :table_name
+    end 
+
+> 这个测试断言，当admin/foo作为NAME参数值， 例如 rails g mailer admin/foo 
+> 我们可以访问这些方法，返回对应的值
+
+> 最后,mailer生成器提供两个回调,一个是模板引擎,另一个是测试框架, 这些回调变成选项，可以通过命令行传递， 生成器允许接收一组参数和选项如下所示
+
+    $ rails g mailer Notifier welcome contact --test-framework=rspec
