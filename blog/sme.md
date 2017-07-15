@@ -436,3 +436,95 @@
       (rails/)generators/erb_generator
 
 > 如果这些生成器其中一个被找到,通过命令行传递给mailer generator的参数同样传递给这个生成器，在这个例子中生成器 Erb::Generators::MailerGenerator 我们下节讨论
+
+###### Template-Engine Hooks
+
+> rails为template engines暴露了三个回调，一个用于控制器，一个是用于mailer，一个是用于脚手架生成器,前两个生成文件只有一些actions通过命令行支持,例如rails g mailer Notifier welcome contact 或 rails g controller Info about contact，对于给定的每个action，模板引擎都会为它创建一个模板
+
+
+> 换句话说,scaffold回调创建所有试图 index , edit , show , new , 和 the _form partial.
+
+> Erb::Generators::ControllerGenerator 实现如下
+
+    rails/railties/lib/rails/generators/erb/controller/controller_generator.rb
+      require "rails/generators/erb"
+      module Erb
+        module Generators
+          class ControllerGenerator < Base
+            argument :actions, type: :array,default: [], banner: "action action"
+            def copy_view_files
+              base_path = File.join("app/views", class_path, file_name)
+              empty_directory base_path
+              actions.each do |action|
+                @action = action
+                @path = File.join(base_path, filename_with_extensions(action))
+                template filename_with_extensions(:view), @path
+              end
+            end
+          end
+        end
+      end
+
+> 这个方法 filename_with_extensions() 我们没有讨论
+
+    rails/railties/lib/rails/generators/erb.rb
+    require "rails/generators/named_base"
+    module Erb
+      module Generators
+        class Base < Rails::Generators::NamedBase
+          protected
+          def format
+          :html
+          end
+          def handler
+          :erb
+          end
+          def filename_with_extensions(name)
+          [name, format, handler].compact.join(".")
+          end
+        end
+      end
+    end
+
+> Erb:: Generators::ControllerGenerator在app/views创建视图文件，使用配置好的格式核处理器为每个给定的action, 用来创建试图的模板源码如下
+
+    rails/railties/lib/rails/generators/erb/controller/templates/view.html.erb
+    <h1><%= class_name %>#<%= @action %></h1>
+    <p>Find me in <%= @path %></p>
+
+> rails g controller admin/foo bar 输出文件app/views/admin/foo/bar.html.erb 
+
+
+    <h1>Admin::Foo#bar</h1>
+    <p>Find me in app/views/admin/foo/bar</p>
+
+> Erb::Generators::MailerGenerator类简单继承了controller生成器 修改了默认格式为text
+> 重复利用其他逻辑
+
+    rails/railties/lib/rails/generators/erb/mailer/mailer_generator.rb
+    require "rails/generators/erb/controller/controller_generator"
+      module Erb
+        module Generators
+        class MailerGenerator < ControllerGenerator
+          protected
+          def format
+          :text
+          end
+        end
+      end
+    end
+
+> mailer使用的模板如下
+
+    rails/railties/lib/rails/generators/erb/mailer/templates/view.text.erb
+    <%= class_name %>#<%= @action %>
+    <%%= @greeting %>, find me in app/views/<%= @path %>
+
+> 如果我们看一下ERB生成器目录结构 我们可以看到那些模板被使用
+
+![](10.png)
+
+> 因此,如果我们想完整替换erb生成器,我们需要创建这些生成器和模板，因为rails生成器可以继承,我们可以继承各自的ERB生成器复写一些方法
+
+
+######Creating Our First Generator
