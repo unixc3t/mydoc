@@ -575,4 +575,74 @@
 
 > 然而你或许不想添加这行代码到所有需要的程序里，如果我们在插件里设置为默认值，而不在application里不是更好？ rails允许我们这样做，使用rails::Railtie
 
+#### 4.4 Extending Rails with Railties
 
+> Rails::Railtie读作Rails Rail-tie，允许你设置rails初始化和配置一些默认值，这样的工具允许框架，例如active Record,告诉rails它如何被初始化和配置，通过railtie
+
+> 如果下面有一条你需要，你就应该引入railtie在你的插件里
+
+* 你的插件需要执行给定的任务，在rails初始化时或者在初始化后
+* 你的插件需要修改配置值，例如设置生成器
+
+* 你的插件提供了rake任务和生成器，没有在默认位置(默认位置是Lib/tasks，lib/generators，lib/rails/generators)
+
+* 你的插件想运行自定义代码，在rails console或者rails启动时运行
+
+* 你想让你的插件提供配置选项给application，例如config.my_plugin.key= :value
+
+> 让我们看一段ActiveRecord::Railtie示例，摘自rails源码，包含了一些使用场景
+
+    rails/activerecord/lib/active_record/railtie.rb
+    module ActiveRecord
+    class Railtie < Rails::Railtie
+    config.active_record = ActiveSupport::OrderedOptions.new
+    config.app_generators.orm :active_record, migration: true,
+    timestamps: true
+    config.app_middleware.insert_after "::ActionDispatch::Callbacks",
+    "ActiveRecord::QueryCache"
+    config.eager_load_namespaces << ActiveRecord
+    rake_tasks do
+    require "active_record/base"
+    load "active_record/railties/databases.rake"
+    end
+    runner do
+    require "active_record/base"
+    end
+    initializer "active_record.initialize_timezone" do
+    ActiveSupport.on_load(:active_record) do
+    self.time_zone_aware_attributes = true
+    self.default_timezone = :utc
+    end
+    end
+    initializer "active_record.migration_error" do
+    if config.active_record.delete(:migration_error) == :page_load
+    config.app_middleware.insert_after "::ActionDispatch::Callbacks",
+    "ActiveRecord::Migration::CheckPending"
+    end
+    end
+    end
+    end
+
+> 看完例子后，我们准备创建我们自己的railtie,配置mail生成器使用我们新的模板处理器作为默认
+
+    handlers/lib/handlers/railtie.rb
+    module Handlers
+      class Railtie < Rails::Railtie
+        config.app_generators.mailer template_engine: :merb
+      end
+    end
+
+> 因为我们的railtie必须在插件被读取时加载，我们需要添加到lib/handlers.rb里
+
+    handlers/2_final/lib/handlers.rb
+    require "handlers/railtie"
+
+
+> 这就是全部了，让我们进入虚拟application，test/dummy里，调用生成器帮助方法，rails g mailer --help. 注意，默认的模板引擎已经变成merb. 所以我们不需要在调用时传递选项了
+
+> rails主要的生成器,例如model,controller,scaffold。都基于回调(hook)，如我们看到的，这都允许我们修改，适应我们的工作流和工具
+
+> 重要的是，我们的application初始化之前我们的railtie被读取。 这也就是为什么，在一个新的rails application中，我们在定义application之前require 依赖
+
+> 此外,即使插件允许修改rails默认，application仍然有最终决定权，例如。我们改变rails使用：merb,
+> 然而如果开发者想改回:erb，可以在config/application.rb中修改
