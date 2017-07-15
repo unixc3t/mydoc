@@ -528,3 +528,51 @@
 
 
 ######Creating Our First Generator
+
+> 我们需要实现我们的.merb 邮件生成器继承自Erb::Generators::MailerGenerator,复写format() and handler()方法， 我们的实现类似下面
+
+    handlers/2_final/lib/generators/merb/mailer/mailer_generator.rb
+    require "rails/generators/erb/mailer/mailer_generator"
+    module Merb
+      module Generators
+        class MailerGenerator < Erb::Generators::MailerGenerator
+          source_root File.expand_path("../templates", __FILE__)
+          protected
+          def format
+          nil # Our templates have no format
+          end
+          def handler
+          :merb
+          end
+        end
+      end
+    end
+
+> 我们需要调用一个方法source_root()在类作用域中，告诉rails去lib/generators/merb/mailer/templates，得到模板
+
+> 因为我们选择了nil作为默认格式,:merb为处理器，我们创建的模板如下
+
+    handlers/lib/generators/merb/mailer/templates/view.merb
+    <%= class_name %>#<%= @action %>
+    <%%= @greeting %>, find me in app/views/<%= @path %>
+
+> 就是这样,我们的模板与web生成器内容一样，但是我们可以修改它引入一些markdown,让我们移动到我们的虚拟application里，然后调用下面命令
+
+    $ rails g mailer Mailer contact welcome --template-engine=merb
+
+> 命令创建了一个mailer叫做Mailer有两个模板，contact.merb和welcome.merb，如下
+
+    
+    create app/mailers/mailer.rb
+    create merb
+    create app/views/mailer
+    create app/views/mailer/contact.merb
+    create app/views/mailer/welcome.merb
+
+> 你可以配置你的程序test/dummy/config/application.rb 使用merb生成器作为默认，通过如下
+
+    config.generators.mailer template_engine: :merb
+
+> 然而你或许不想添加这行代码到所有需要的程序里，如果我们在插件里设置为默认值，而不在application里不是更好？ rails允许我们这样做，使用rails::Railtie
+
+
