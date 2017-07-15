@@ -646,3 +646,40 @@
 
 > 此外,即使插件允许修改rails默认，application仍然有最终决定权，例如。我们改变rails使用：merb,
 > 然而如果开发者想改回:erb，可以在config/application.rb中修改
+
+
+#### 4.5 Wrapping Up
+
+> 在这章，我们反证了rails渲染栈的讨论，通过构建一个模板处理器，我们主要的模板处理器处理.merb扩展名的模板，使用erb混入了markdown语法，允许渲染html和普通文本，仅适用一个模板
+
+>在这章的末尾，我们创建了一个生成器，修改rails使用我们新的模板处理器，也讨论了生成器api，相关的一些方法，Thor::Actions定义的copy_file() , inject_into_file() , create_file() , run()
+>此外，rails有一个模块叫做Rails::Generators::Actions。提供了一些方法适用于rails，例如gem(),environment()，route(),和许多其他的，rails也提供了一个测试生成器工具，叫做ails::Generators::TestCase ,当我们测试我们的生成器是很有用，下面有一些例子，rails使用Rails：：Generators::TestCase来测试他自己的mailer generator:
+
+    rails/railties/test/generators/mailer_generator_test.rb
+    require "generators/generators_test_helper"
+    require "rails/generators/mailer/mailer_generator"
+    class MailerGeneratorTest < Rails::Generators::TestCase
+    arguments %w(notifier foo bar)
+    def test_mailer_skeleton_is_created
+    run_generator
+    assert_file "app/mailers/notifier.rb" do |mailer|
+    assert_match(/class Notifier < ActionMailer::Base/, mailer)
+    assert_match(/default from: "from@example.com"/, mailer)
+    end
+    end
+    def test_mailer_with_i18n_helper
+    run_generator
+    assert_file "app/mailers/notifier.rb" do |mailer|
+    assert_match(/en\.notifier\.foo\.subject/, mailer)
+    assert_match(/en\.notifier\.bar\.subject/, mailer)
+    end
+    end
+    def test_invokes_default_test_framework
+    run_generator
+    assert_file "test/mailers/notifier_test.rb" do |test|
+    assert_match(/class NotifierTest < ActionMailer::TestCase/, test)
+    assert_match(/test "foo"/, test)
+    assert_match(/test "bar"/, test)
+    end
+    end
+    end
