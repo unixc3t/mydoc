@@ -62,7 +62,7 @@
 
 > 为了实现这个，我们创建一个叫做handlers的rails插件
 
-    $ rails plug-in new handlers
+    $ rails plugin new handlers
 
 > 下一步我们编写一个集成测试，测试我们的模板处理器，我们的目标是渲染test/dummy/app/views/handlers/rb_handler.html.rb
 

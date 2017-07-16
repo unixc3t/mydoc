@@ -6,3 +6,4 @@
   * [Building Models with Active Model](bmwam.md)
   * [Retrieving View Templates from Custom Stores](rvtfcs.md)
   * [Sending Multipart Emails Using Template Handlers](sme.md)
+  * [Streaming Server Events to Clients Asynchronously](sseca.md)
