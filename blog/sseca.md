@@ -44,3 +44,31 @@
     end
 
 > 创建一个Rails::Engine十分类似创建一个Rails::Railtie.因为Rails::Engine相比较Rails::Railtie只不过多了一些默认初始化设置，和paths程序接口 我们下节看到
+
+
+###### Paths
+
+> 一个Rails::Engine没有硬编码路径，这意味着我们不需要放置我们的models和controllers在app/目录下，我们可以把他们放到任何位置。例如。我们配置我们的engine读取我们的控制器从lib/controllers目录，替代app/controllers，如下
+
+      module LiveAssets
+        class Engine < Rails::Engine
+         paths["app/controllers"] = ["lib/controllers"]
+        end
+      end
+
+> 我们也可以让rails读取我们的controllers从app/controllers和lib/controllers两个目录里
+
+    module LiveAssets
+      class Engine < Rails::Engine
+        paths["app/controllers"] << "lib/controllers"
+      end
+    end
+
+>这些路径有一样的语义在rails application里，如果你有一个控制器叫做LiveAssetsController在app/controllers/live_assets_controller.rb里，或者在lib/controllers/live_assets_controller.rb里，这个控制器都会被自动加载，当你需要这个控制器的时候， 不如要显示的required
+
+> 现在，我们遵守传统路径,粘贴我们的控制器到app/controllers,所以不应用前面的改变，通过查看rails源码，我们可以检查所有自定义路径
+
+![](11.png)
+
+> 上面的代码片段展示了哪些指定的路径应该被热加载,哪个不被热加载，添加列表路径到
+> locales,migrations等等，然而声明一个路径是不够的，还要用路径做些事情
