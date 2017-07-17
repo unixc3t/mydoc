@@ -249,6 +249,7 @@
 
 > 修改我们的布局引入engine资源 但是仅在开发模式
 
+    live_assets/test/dummy/app/views/layouts/application.html.erb
     <!DOCTYPE html>
     <html>
     <head>
@@ -262,3 +263,24 @@
     <%= yield %>
     </body>
     </html>
+
+> 重启虚拟app(dummp目录下的app)，使用浏览器浏览localhost:3000,如果你的浏览器有网络面板,
+> 可以看http请求，通过浏览器发送的，你或许期望每个样式表每秒钟都被重新加载,但是没有发生,在下图
+
+![](12.png)
+
+> 即使puma是一个多线程服务器,rails允许仅有一个线程在一个时间点运行，我们需要改变虚拟程序允许并行计算
+
+    live_assets/test/dummy/config/application.rb
+    config.allow_concurrency = true
+
+> 因为浏览器与web服务器链接，然后等待服务器相应请求，我们需要关闭浏览器之前重启web服务器,关闭浏览器，重新启动服务器，然后重新打开地址loalhost:3000;我们可以看到样式表没秒都在重新加载
+>为了验证我们的样式表被重新加载,我们编辑test/dummy/app/assets/stylesheets/application.css文件，观察发生的改变，不需要刷新页面，尝试设置文本颜色如下
+
+    body { color: red; }
+
+> 如你所见，我们的server-sent events推送流工作了，然而，我们还是可以做一些改善，首先，我们想仅仅修改样式仅当文件系统上的文件内容发生改变时，而不是每秒都重新加载，观察这些变化应该是会提高效率的，如果我们有5个页面，我们不想为我们打开的所有页面都去查询文件系统，我们将有一个主文件系统侦听器实体，每个请求都可以订阅。
+
+> 第二个问题是我们的代码目前没有任何测试，这种特性其实很难编写测试，因为流发送无限的数据，为了可以直接从控制器测试，我们需要将存在的组件变得更小，更可测试
+
+> 最后，因为我们使用了config.allow_concurrency，我们需要理解这样的设置如何影响基于stremaing部署的applications，所以我们有很多工作要做
