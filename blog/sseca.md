@@ -72,3 +72,28 @@
 
 > 上面的代码片段展示了哪些指定的路径应该被热加载,哪个不被热加载，添加列表路径到
 > locales,migrations等等，然而声明一个路径是不够的，还要用路径做些事情
+
+
+######  Initializers
+
+> 一个engine有几个初始化程序，负责启动engine， 这些初始化器相当底层，不会与你application的config/initializers下的任何一个混淆。 让我们看一个例子
+
+    rails/railties/lib/rails/engine.rb
+      initializer :add_view_paths do
+        views = paths["app/views"].existent
+        unless views.empty?
+          ActiveSupport.on_load(:action_controller){ prepend_view_path(views) }
+          ActiveSupport.on_load(:action_mailer){ prepend_view_path(views) }
+        end
+      end
+
+> 初始化器负责添加我们的engine views,通常定义在app/views里，ActionController::Base 和 ActionMailer::Base一被加载 允许一个rails application使用engine中定义的模板， 可以看一下engine中的全部初始器，我们可以打开一个控制台，在test/dummy下，输入下面
+
+    Rails::Engine.initializers.map(&:name) # =>
+      [:set_load_path, :set_autoload_paths, :add_routing_paths,
+      :add_locales, :add_view_paths, :load_environment_config,
+      :append_assets_path, :prepend_helpers_path,
+      :load_config_initializers, :engines_blank_point]
+
+> 使用engine和使用rails application十分类似，我们都知道怎样构建实现我们的流插件
+
