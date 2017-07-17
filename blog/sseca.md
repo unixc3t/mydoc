@@ -161,3 +161,104 @@
 
 > 每秒，你都会看到Hello world 出现在屏幕上，这意味着流推送正在工作， 按住CTRL+C中断传输，我们进一步学习一个更复杂的例子
 
+###### Server-Sent Events
+
+> 开发者总是需要在浏览器里收到服务端的更新，很长一段时间里，轮询是最通用的解决这个问题的技术。在轮询的时候，浏览器频繁发送请求到服务器端，询问是否有新数据,如果没有新数据，服务端返回一个空响应，浏览器再开始新的请求,根据频率，浏览器最终向服务器发送许多请求，产生大量开销。
+
+>不断发展,长轮询技术出现,使用这个技术,浏览器定期的发送请求给服务端,如果没有更新服务器端在发送空响应之前，等待一段时间，虽然比传统的轮询执行的好一些，浏览器之间存在交叉兼容性问题。
+> 此外,许多代理和服务端如果一段时间没有通讯就会发生链接丢失，这种方法就失效了
+
+
+> 为了解决开发者的需求，html标准引入了两个api， Server Sent Events (SSE) 和 WebSockets，WebSockets允许客户端和服务器端交换信息在同一个连接上，但是因为是新协议，或许需要改变你的开发栈来支持他,两一个，Server sent Event，是一个单向通讯通道。从服务端到客户端,可以使用任何web服务器，只要能够支持流响应(stream response),基于这些原因sse使我们这章节选择的方案。
+
+> sse基础就是event stream format，下面是一个对http请求的事件流响应
+
+
+    HTTP/1.1 200 OK
+    Content-Type: text/event-stream
+
+    event: some_channel
+    data: {"hello":"world"}
+
+    event: other_channel
+    data: {"another":"message"}
+
+> 数据的界定通过两个新行，每个信息有一个event和他关联的数据，在这个例子中, 数据时json，但它也可以是文本，当流推送的时候，我们需要从服务端返回一个格式, 让我们创建一个新的action叫做sse在我们的LiveAssetsController里，发送一个reloadcss事件，每秒钟发送一次
+
+    live_assets/1_live/app/controllers/live_assets_controller.rb
+    def sse
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Content-Type"] = "text/event-stream"
+    while true
+    response.stream.write "event: reloadCSS\ndata: {}\n\n"
+    sleep 1
+    end
+    rescue IOError
+    response.stream.close
+    end
+
+> 类似我们第一个action,除了现在我们需要设置适当的响应内容类型，并且关闭缓存，服务端已经准备好。我们来写客户端，使用js:
+
+    live_assets/1_live/app/assets/javascripts/live_assets/application.js
+    window.onload = function() {
+    // 1. Connect to our event-stream
+    var source = new EventSource('/live_assets/sse');
+    // 2. This callback will be triggered on every reloadCSS event
+    source.addEventListener('reloadCSS', function(e) {
+    // 3. Load all CSS entries
+    var sheets = document.querySelectorAll("[rel=stylesheet]");
+    var forEach = Array.prototype.forEach;
+    // 4. For each entry, clone it, add it to the
+    //
+    document and remove the original after
+    forEach.call(sheets, function(sheet){
+    var clone = sheet.cloneNode();
+    clone.addEventListener('load', function() {
+    sheet.parentNode.removeChild(sheet);
+    });
+    document.head.appendChild(clone);
+    });
+    });
+    };
+
+
+> 我们的javascript文件链接我们的后端，每个监听reloadcss事件,在页面重新加载所有的样式，我们的资源文件定义在,app/assets/live_assets/application.js，这个结构是需要的，因为rails仅仅预编译资源文件匹配application.*。因为他们是仅有的被预编译的文件，这样的文件通常被引入所有存在的文件里， 那就是为什么叫做manifests.
+
+> 最后我们创建一个帮助方法，让application读取我们资源更方便
+
+    live_assets/1_live/app/helpers/live_assets_helper.rb
+    module LiveAssetsHelper
+    def live_assets
+    javascript_include_tag "live_assets/application"
+    end
+    end
+
+> 使用我们的server sent events机制，我们到test/dummy创建一个控制器
+
+    live_assets/1_live/test/dummy/app/controllers/home_controller.rb
+    class HomeController < ApplicationController
+    def index
+    render text: "Hello", layout: true
+    end
+    end
+
+    live_assets/1_live/test/dummy/config/routes.rb
+    Dummy::Application.routes.draw do
+    root to: "home#index"
+    end
+
+> 修改我们的布局引入engine资源 但是仅在开发模式
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Dummy</title>
+    <%= stylesheet_link_tag "application", media: "all" %>
+    <%= javascript_include_tag "application" %>
+    <%= live_assets if Rails.env.development? %>
+    <%= csrf_meta_tags %>
+    </head>
+    <body>
+    <%= yield %>
+    </body>
+    </html>
