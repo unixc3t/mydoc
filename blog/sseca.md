@@ -97,3 +97,67 @@
 
 > 使用engine和使用rails application十分类似，我们都知道怎样构建实现我们的流插件
 
+
+
+#### 5.2 Live Streaming
+
+> 看一下streaming如何工作，让我们创建一个控制器叫做LiveAssetsController,文件位置app/controllers/live_assets_controller.rb，引入了ActionController::Live功能，发送hello world间断。
+
+    live_assets/1_live/app/controllers/live_assets_controller.rb
+    class LiveAssetsController < ActionController::Base
+      include ActionController::Live
+      def hello
+      while true
+      response.stream.write "Hello World\n"
+      sleep 1
+      end
+      rescue IOError
+      response.stream.close
+      end
+    end
+
+> 我们的控制器提供了一个action叫做hello(),每秒发送一个Hello world, 如果有任何原因，导致链接在server和client中断，response.stream.write会失败抛出IOError. 我们需要捕获它，关闭流
+
+> 我们需要一个路由配置
+
+    live_assets/1_live/config/routes.rb
+      Rails.application.routes.draw do
+      get "/live_assets/:action", to: "live_assets"
+      end
+
+
+> 我们准备尝试发送流到客户端,然而，因为rails engine不能运行自己，我们需要启动它在test/dummy中，此外流功能不会工作在webrick中，webrick是ruby和rails使用默认服务器，webrick将缓存我们发送到客户端响应,
+> 所以我们不会看到任何东西，对于这个原因，我们使用puma，添加到我们的gemspec作为开发依赖
+
+> 最后。我们进入test/dummy目录，执行rail s ,rails现在启动 替代了webrick
+
+    Booting Puma
+    Rails 4.0.0 application starting in development on http://0.0.0.0:3000
+    Call with -d to detach
+    Ctrl-C to shutdown server
+    
+>大多数浏览器会尝试缓存流相应，或者需要一段时间，他们决定是否要展示我们的内容， 所以测试我们的流发送到末端，我们使用curl 通过命令行
+
+    $ curl -v localhost:3000/live_assets/hello
+    > GET /live_assets/hello HTTP/1.1
+    > User-Agent: curl/7.24.0 (x86_64-apple-darwin12.0)
+    > Host: localhost:3000
+    > Accept: */*
+    >
+    < HTTP/1.1 200 OK
+    < X-Frame-Options: SAMEORIGIN
+    < X-XSS-Protection: 1; mode=block
+    < X-Content-Type-Options: nosniff
+    < X-UA-Compatible: chrome=1
+    < Cache-Control: no-cache
+    < Content-Type: text/html; charset=utf-8
+    < X-Request-Id: f21f8c0d-d496-4bfa-944c-cd01b44b87ee
+    < X-Runtime: 0.003120
+    < Transfer-Encoding: chunked
+    <
+    Hello World
+    Hello World
+
+
+> 每秒，你都会看到Hello world 出现在屏幕上，这意味着流推送正在工作， 按住CTRL+C中断传输，我们进一步学习一个更复杂的例子
+
