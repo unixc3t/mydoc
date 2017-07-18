@@ -321,3 +321,41 @@
       end
       end
       end
+
+> 我们的代码原理是在一个线程里监听, 监听一组给定的目录，每次发生改变，推送注册的事件给每个订阅者， 因为我们使用listen gem,让我们添加到gemspec,
+
+    live_assets/2_listener/live_assets.gemspec
+    s.add_dependency "listen"
+
+> 虽然我们不能编写集成测试给action因为流更新是无限的，我们监听功能从流系统剥离出来，允许我们独立测试，让我们编写一个测试，开启监听，然后验证一个事件推送给我们的订阅者，当test/tmp目录发生变化时。
+
+    live_assets/2_listener/test/live_assets_test.rb
+    require "test_helper"
+    require "fileutils"
+    class LiveAssetsTest < ActiveSupport::TestCase
+    setup do
+    FileUtils.mkdir_p "test/tmp"
+    end
+    teardown do
+    FileUtils.rm_rf "test/tmp"
+    end
+    test "can subscribe to listener events" do
+    # Create a listener
+    l = LiveAssets.start_listener(:reload, ["test/tmp"])
+    # Our subscriber is a simple array
+    subscriber = []
+    LiveAssets.subscribe(subscriber)
+    begin
+    while subscriber.empty?
+    # Trigger changes in a file until we get an event
+    File.write("test/tmp/sample", SecureRandom.hex(20))
+    end
+    # Assert we got the event
+    assert_includes subscriber, :reload
+    ensure
+    # Clean up
+    LiveAssets.unsubscribe(subscriber)
+    l.kill
+    end
+    end
+    end
