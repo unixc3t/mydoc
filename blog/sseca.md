@@ -284,3 +284,40 @@
 > 第二个问题是我们的代码目前没有任何测试，这种特性其实很难编写测试，因为流发送无限的数据，为了可以直接从控制器测试，我们需要将存在的组件变得更小，更可测试
 
 > 最后，因为我们使用了config.allow_concurrency，我们需要理解这样的设置如何影响基于stremaing部署的applications，所以我们有很多工作要做
+
+#### 5.3 Filesystem Notifications with Threads
+
+> 一个rails程序默认产生三个资源目录,app/assets,lib/assets,和vendor/assets.我们的资源应该被分割到这些目录使用和我们分割代码一样的方式,app目录应该包含直接和我们程序相关的资源，lib目录包含独立js或者css组件，组件使用远超我们的application. vendor目录包含第三方文件
+
+> 我们想监视这些目录上的文件的改变，一种选择是每秒或更少地手动检查每个目录中每个文件的修改时间。这就是文件系统轮询，轮询或许是个好的开始点，但是资源文件不断增长，会变得非常耗费CPU
+
+> 幸运的是，大多数系统提供一个通知机制，为文件系统改变,我们简单传递操作系统所有我们想监视的目录，并且如果一个文件被添加，移除，修改，我们的代码将会被通知,这个listen gem提供了所有主流系统通知机制的api调用，考虑我们的需求有一个实体监视文件系统，我们的请求可以订阅，让我们在一个线程里包装所有监听功能,在请求旁并发运行，打开lib/live_assets.rb实现它
+
+    live_assets//lib/live_assets.rb
+      require "live_assets/engine"
+      require "thread"
+      require "listen"
+        
+      module LiveAssets
+        mattr_reader :subscribers
+        @@subscribers = []
+        
+      # Subscribe to all published events.
+      def self.subscribe(subscriber)
+      subscribers << subscriber
+      end
+      # Unsubscribe an existing subscriber.
+      def self.unsubscribe(subscriber)
+      subscribers.delete(subscriber)
+      end
+      # Start a listener for the following directories.
+      # Every time a change happens, publish the given
+      # event to all subscribers available.
+      def self.start_listener(event, directories)
+      Thread.new do
+      Listen.to(*directories, latency: 0.5) do |_modified, _added, _removed|
+      subscribers.each { |s| s << event }
+      end
+      end
+      end
+      end
