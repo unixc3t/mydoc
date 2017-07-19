@@ -359,3 +359,95 @@
     end
     end
     end
+
+
+> 不错，看起来我们的监听器工作如预期，当你运行测试的时候，你可能得到一些来自Listen gem的警告，因为它使用文件系统轮询，除非你安装了一个gem针对你的操作系统使用文件系统提醒。想更自由可以添加一个这样的gem到你的gemfile.不是gemspec,因为对于我们的插件listen这样的gem不是必须的依赖
+
+> 最后我们需要确保监听我们的资源目录，当我们application启动就开始监视，然后推动一个:reloadcss时间，当发生改变的时候，让我们写一个测试
+
+    live_assets/2_listener/test/live_assets_test.rb
+    test "can subscribe to existing reloadCSS events" do
+      subscriber = []
+      LiveAssets.subscribe(subscriber)
+      begin
+      while subscriber.empty?
+      FileUtils.touch("test/dummy/app/assets/stylesheets/application.css")
+      end
+      assert_includes subscriber, :reloadCSS
+      ensure
+      LiveAssets.unsubscribe(subscriber)
+      end
+    end
+
+> 我们的测试假设监听已经可以使用，为了确保测试可以使用，我们定义一个初始化器在我们的engine里，类似我们前面章节看到的，启动监听，传递资源目录作为参数
+
+    live_assets/2_listener/lib/live_assets/engine.rb
+    module LiveAssets
+    class Engine < ::Rails::Engine
+    initializer "live_assets.start_listener" do |app|
+    paths = app.paths["app/assets"].existent +
+    app.paths["lib/assets"].existent +
+    app.paths["vendor/assets"].existent
+    paths = paths.select { |p| p =~ /stylesheets/ }
+    if app.config.assets.compile
+    LiveAssets.start_listener :reloadCSS, paths
+    end
+    end
+    end
+    end
+
+> 注意我们开始监听只有在资源被动态编译时。这样防止在生产版本中也监听，在生产版本资源编译配置和与编译配置，通常设置为false。
+
+> 现在我们的监听器已经启动，并且准备推送事件给订阅者，每次访问/live_assets/sse，我们需要创建一个新的订阅者，添加他到订阅列表，然后等一个新的事件推送我们的订阅者.一旦事件达到，我们就发送一个 server-sent evnet给浏览器，如下图所示
+
+![](13.png)
+
+> 图中最棘手的部分就是等待： 我们想每个请求都是空闲状态，知道一个事件到达，在循环中检查新事件，和我们在测试中做的一样，这不是一个好的选择，因为会导致CPU使用率过高，我们通过休眠一定的时间来解决这个问题，例如半秒，然后检查事件，但是这样也效果一般，最完美的效果是，我们想让让他睡眠，当事件到达时自动醒来。
+
+
+> ruby有一个饭没的解决方案在标准库中，使用Queue类，让我们看一下
+
+
+###### Threads and Queues
+
+> 队列是先进先出的结构， 我们可以实现一个队列访问任何ruby代码通过require thread,它提供了一个简单的api
+
+
+      require "thread"
+      q = Queue.new
+      t = Thread.new do
+      while last = q.pop
+      sleep(1) # simulate cost
+      puts last
+      end
+      end
+
+      q << :foo
+      sleep(1)
+      $stdout.flush
+
+> 上面代码，创建了队列Queue,和一个Thread， 在县城里是一个循环，调用Queue#pop()方法，如果队列里，如果队列里没有任何项，线程就会阻塞，直到新的项被添加到队列， 最后三行，我们将一个符号Push到队里了，将会唤醒线程，一秒后，我们flush ,写入$sdout,会看到foo
+
+> 这意味着队列对于我们是完美的结构用来作为订阅者，如果队列是空的请求进入睡眠，直到新事件到达，然后我们推送这个新事件然后进入睡眠，我们创建一个类叫做LiveAssets::SSESubscriber，用来接收这些时间，以server-sent stream format格式输出，如下测试
+
+    live_assets/2_listener/test/live_assets/subscriber_test.rb
+    require "test_helper"
+    require "thread"
+    class LiveAssets::SubscriberTest < ActiveSupport::TestCase
+    test "yields server sent events from the queue" do
+    # Let's start our queue with some events
+    queue = Queue.new
+    queue << :reloadCSS
+    queue << :ping
+    queue << nil
+    # And create a subscriber on top of it
+    subscriber = LiveAssets::SSESubscriber.new(queue)
+    stream = []
+    subscriber.each do |msg|
+    stream << msg
+    end
+    assert_equal 2, stream.length
+    assert_includes stream, "event: reloadCSS\ndata: {}\n\n"
+    assert_includes stream, "event: ping\ndata: {}\n\n"
+    end
+    end
