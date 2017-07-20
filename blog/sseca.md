@@ -558,3 +558,20 @@
 
 
 ###### Autoload techniques
+
+> 我们在这章的LIveAssets::SSESubscribe中使用了autoload
+
+    module LiveAssets
+      autoload :SSESubscriber, "live_assets/sse_subscriber"
+    end
+
+> 现在，第一次time LiveAssets::SSESubscriber被范根，它会自动被读取，rails plugin和application还有另一个代码家在技术，就是rails的autoload，例如，我们的LiveAssetsController被自动加载当我们第一次使用它时，但是这个不是由ruby处理的，而是通过
+> rail自带的ActiveSupport::Dependencies
+
+> ruby和rails在的问题是加载代码不是原子性的， 它不是一个单独的步骤，例如，如果你有一个请求发生在A线程里,线程A启动读取LiveAssetsController，LiveAssetsController这个类在线程B中
+>是可见的并且已经被一个请求响应，在Thread A完成加载app/controllers/live_assets_controller.rb文件之前，这种情况下，线程B有一部分控制器的实现，例如，可能紧包含一个hello()方法，没有sse方法，就会导致失败
+
+
+> 尽管一些Ruby实现一直致力于实现Ruby的加载线程安全(前面描述场景并不会发生),rails的autoload并不是线程安全，为了解决这个实际问题，无论何时rails autoload需要加载代码，默认rali只允许一个线程运行，那就意味着在一个时间点，只有一个线程提供服务，那就是为什么我们不能在同一时间使用server-sent events 链接提供资源服务。为了解决这个问题。我们让config.allow_concurrency设置为true。
+
+> 这对生产意味着什么？我们需要明确允许并发吗，我们部署这个应用程序的选项是什么？
