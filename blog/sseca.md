@@ -569,9 +569,81 @@
 > rail自带的ActiveSupport::Dependencies
 
 > ruby和rails在的问题是加载代码不是原子性的， 它不是一个单独的步骤，例如，如果你有一个请求发生在A线程里,线程A启动读取LiveAssetsController，LiveAssetsController这个类在线程B中
->是可见的并且已经被一个请求响应，在Thread A完成加载app/controllers/live_assets_controller.rb文件之前，这种情况下，线程B有一部分控制器的实现，例如，可能紧包含一个hello()方法，没有sse方法，就会导致失败
+>是可见的并且已经被一个请求响应，在Thread A完成加载app/controllers/live_assets_controller.rb文件之前，这种情况下，线程B只会看到有一部分控制器的方法，例如，可能紧包含一个hello()方法，没有sse方法，就会导致失败。
 
 
 > 尽管一些Ruby实现一直致力于实现Ruby的加载线程安全(前面描述场景并不会发生),rails的autoload并不是线程安全，为了解决这个实际问题，无论何时rails autoload需要加载代码，默认rali只允许一个线程运行，那就意味着在一个时间点，只有一个线程提供服务，那就是为什么我们不能在同一时间使用server-sent events 链接提供资源服务。为了解决这个问题。我们让config.allow_concurrency设置为true。
 
 > 这对生产意味着什么？我们需要明确允许并发吗，我们部署这个应用程序的选项是什么？
+
+
+
+###### Eager-Load Techniques
+
+> 在生产版本中，rails热加载你的代码，你全部的方法，控制器，帮助方法，在启动时就加载， 因为所有rails代码在启动时被加载，没有代码被重新加载，自动加载是关闭的，当没有autoload时，在rails程序中使用config.allow_concurrency 为true运行，是安全的这也是rails默认设置的
+
+
+>然而，rails仅仅热加载定义在app目录下的代码。如果我们依赖于ruby autoload,我们需要自己热加载我们自己的代码，否则，我们可能要在一个请求中间加载代码，使用LiveAssets::SSESubscriber可能发生，假设这个场景:
+
+> 第一个请求访问/live_assets/sse，ruby开始加载liveAssets::SSESubscriber.如果这时候许多请求在这个时间请求这个地址，第一个请求还没完成读取subscriber，导致下面的请求只能看到subscriber定义的部分方法,解决方法就是确保LiveAssets::SSESubscriber在rails程序启动时候被热加载, 因为这是rails 插件和rails自己本身的一个共同的需求，rails为我们提供了一些约定
+
+> 第一个约定是config.eager_load_namespaces配置选项，在railtie或engine中是有效的，这个配置用来保证一个命名空间列表被热加载，让我们加入LiveAssets到这个列表，在我们的engine定义里
+
+    live_assets/3_final/lib/live_assets/engine.rb
+    config.eager_load_namespaces << LiveAssets
+
+
+> 现在rails能够调用LiveAssets.eager_load!来直接热加载我们的代码在生产环境里，然而我们还没有实现这个eager_load!(),让我们在ActiveSuuport::Autoload帮助下定义它
+
+    live_assets/3_final/lib/live_assets.rb
+    module LiveAssets
+    extend ActiveSupport::Autoload
+    eager_autoload do
+    autoload :SSESubscriber
+    end
+    end
+
+
+> 通过使用ActiveSupport::Autoload扩展我们的模块,我们自动得到一个LiveAssets.eager_load!方法，需要热加载的代码都被定义在eager_autoload()代码块里,我们不再需要传递一个路径给autoload()放啊，Rails根据常量名称来猜测它。
+
+> 这就是我们需要为rails热加载完成的其余代码,记住，我们每次使用这个技术在我们有代码没有被rails自动加载。通常通过ruby autoload来设置。我们可以在test/dummy目录打开一个控制台，检查rails热加载的所有命名空间
+
+    Rails.application.config.eager_load_namespaces # =>
+    [ ActiveSupport, ActionDispatch, ActiveModel, ActionView,
+    ActionController, ActiveRecord, ActionMailer, LiveAssets::Engine,
+    LiveAssets, Dummy::Application ]
+
+
+> 记住这个热加载技术不仅仅对线程服务器puma有好处，也适用于[unicorn](http://unicorn.bogomips.org/). unicorn在启动后通过一个rails程序快照来操作。 通过热加载我们的代码，我们确保这个快照包含了我们所有提前启动的代码
+>不需要浪费时间在每次请求时加载代码。
+
+> 因此,决定哪个服务器用来推送是复杂的，对于长链接请求通常取决于你的WEB服务器处理并发链接的能力
+> 例如,unicorn通过一个线程池，每个web服务器能紧能够在一个时间处理一个请求(单线程多处理模型),如果一个web服务器正在推送流数据，或者接收一个巨大文件上传。就不能处理其他请求你，即使数据仅仅每10秒发送一次。换句话说这章我们使用的puma web服务器能够处理其他请求即使当我们在推送流数据的时候
+
+
+> 不幸的是，没有银弹，当涉及到部署时，最好的选择是对可用的不同Web服务器进行基准测试。像puma这种多线程服务器能都处理多请求，thin也可以作为事件服务器，然而，在1.5版本，thin让然不支持推送流， 像Passenger 和 Rainbows 允许你混入不同的并发风格，所以你有一个混合的多线程多任务处理部署选择。 对于混入更多选择，你或许得到最好的结果就是不熟在像jruby和rubinius这样的平台
+
+
+> 不同的平台给予开发者不同的安全保证。例如，array操作在jruby中不是线程安全的。这就是一个我们插件中的问题，LiveAssets.subscribers是全局数据结构，可能发生两个请求尝试请求一个订阅事件，在同一时间。 破坏我们的数据结构，那就是说我们需要使用互斥结构包装我们的订阅者这操作,确保仅有一个线程执行一段特定的代码，在某一时刻
+
+    live_assets/3_final/lib/live_assets.rb
+    @@mutex = Mutex.new
+    def self.subscribe(subscriber)
+    @@mutex.synchronize do
+    subscribers << subscriber
+    end
+    end
+    def self.unsubscribe(subscriber)
+    @@mutex.synchronize do
+    subscribers.delete(subscriber)
+    end
+    end
+
+    http://code.macournoyer.com/thin/
+    https://www.phusionpassenger.com/
+    http://rainbows.rubyforge.org
+    http://jruby.org/
+    http://rubini.us/
+
+
+> 通过再次运行测试,我们的测试应该还是绿色，我们的代码现在是线程安全的在jruby上，记住这很重要:每次在请求中全局状态被改变，我们都要检查确保是线程安全的，对应相应的动作.只有写线程安全的代码我们才能有多种部署选择可能性
