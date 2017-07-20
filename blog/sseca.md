@@ -543,3 +543,18 @@
 > 重启puma web服务器，现在ping事件应该每10秒发送一次，我们没有注册任何回调函数在js那端。但是如果我们想也可以，js eventSource对象也有open 和close事件 ，当连接打开和关闭的时候。mozilla开发网有详细说明，你可以去[浏览](https://developer.mozilla.org/en-US/docs/Server-sent_events/Using_server-sent_events)
 
 > 在整个实现过程中,细节中的一个两点就是需要设置config.allow_concurrency 为 true，现在远离live-assets的实现，我们有更好的机会去讨论他
+
+
+
+#### 5.4 Code-Loading Techniques
+
+> 为了理解为什么我们需要直接打开allow_concurrency选项，我们需要分析ruby和rails的代码加载机制
+
+> 最常用的ruby的加载代码技术就是require()方法
+
+    require "live_assets"
+
+> 一些库简单的使用require就能工作的很好,但是随着他们不断增长，他们中的一些逐渐依赖于autoload技术避免一开始就读取全部文件,autoload是一个很重要的技术在rails plugin中，因为他能帮助application的启动时间低于在开发和测试环境，因为我们读取模块仅在我们第一次需要他们的时候。
+
+
+###### Autoload techniques
