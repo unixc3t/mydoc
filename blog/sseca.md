@@ -496,3 +496,50 @@
 
 > 我们基本上已经实现完成了，但是还有最后一个问题需要我们解决，当样式长时间没有改变。我们会有一段长时间没有推送任何事件给浏览器, 这或许会引起浏览器服务端或者和代理之间的链接关闭
 
+
+
+######　Timer
+
+> 为了确保连接不会再长时间空闲时被关闭，我们需要一个定时器，负责解决推送一个 ping时间给订阅者,10秒一次,让我们开始测试
+
+    test "receives timer notifications" do
+    # Create a timer
+    l = LiveAssets.start_timer(:ping, 0.5)
+    # Our subscriber is a simple array
+    subscriber = []
+    LiveAssets.subscribe(subscriber)
+    begin
+    # Wait until we get an event
+    true while subscriber.empty?
+    assert_includes subscriber, :ping
+    ensure
+    # Clean up
+    LiveAssets.unsubscribe(subscriber)
+    end
+    end
+
+
+> 我们的听时期将运行在自己的线程上,推送事件给订阅者　
+
+    live_assets/3_final/lib/live_assets.rb
+      def self.start_timer(event, time)
+      Thread.new do
+      while true
+      subscribers.each { |s| s << event }
+      sleep(time)
+      end
+      end
+      end
+
+> 上面的实现确保我们测试通过，最后添加到engine里面，另一个初始化器负责启动定时器
+
+    live_assets/3_final/lib/live_assets/engine.rb
+    initializer "live_assets.start_timer" do |app|
+    if app.config.assets.compile
+    LiveAssets.start_timer :ping, 10
+    end
+    end
+
+> 重启puma web服务器，现在ping事件应该每10秒发送一次，我们没有注册任何回调函数在js那端。但是如果我们想也可以，js eventSource对象也有open 和close事件 ，当连接打开和关闭的时候。mozilla开发网有详细说明，你可以去[浏览](https://developer.mozilla.org/en-US/docs/Server-sent_events/Using_server-sent_events)
+
+> 在整个实现过程中,细节中的一个两点就是需要设置config.allow_concurrency 为 true，现在远离live-assets的实现，我们有更好的机会去讨论他
