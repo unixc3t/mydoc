@@ -451,3 +451,48 @@
     assert_includes stream, "event: ping\ndata: {}\n\n"
     end
     end
+
+> 我们的测试创建了一个队列，将它传递给订阅者，然后通过消耗事件提醒订阅者，注意。当我们添加nil到队列中，表示我们没有产生事件和消耗事件， 让我们实现一个订阅者
+
+      live_assets/2_listener/lib/live_assets/sse_subscriber.rb
+      require "thread"
+      module LiveAssets
+      class SSESubscriber
+      def initialize(queue = Queue.new)
+      @queue = queue
+      LiveAssets.subscribe(@queue)
+      end
+      def each
+      while event = @queue.pop
+      yield "event: #{event}\ndata: {}\n\n"
+      end
+      end
+      def close
+      LiveAssets.unsubscribe(@queue)
+      end
+      end
+      end
+
+> 然后自动加载他 
+
+    autoload :SSESubscriber, "live_assets/sse_subscriber"
+
+> 最后我们编写一个live_assets#sse的action 确保使用我们新的订阅者
+
+    live_assets/2_listener/app/controllers/live_assets_controller.rb
+    def sse
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Content-Type"] = "text/event-stream"
+    sse = LiveAssets::SSESubscriber.new
+    sse.each { |msg| response.stream.write msg }
+    rescue IOError
+    sse.close
+    response.stream.close
+    end
+
+> 再一次，我们在test/dummy里面，重启puma服务器，验证仅仅只有修改app/assets/stylesheets/application.css 才推送事件流，反映到页面的改变。这次我们修改字体
+
+    body { font-size: 32px; }
+
+> 我们基本上已经实现完成了，但是还有最后一个问题需要我们解决，当样式长时间没有改变。我们会有一段长时间没有推送任何事件给浏览器, 这或许会引起浏览器服务端或者和代理之间的链接关闭
+
