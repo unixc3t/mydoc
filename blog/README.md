@@ -8,3 +8,4 @@
   * [Retrieving View Templates from Custom Stores](rvtfcs.md)
   * [Sending Multipart Emails Using Template Handlers](sme.md)
   * [Streaming Server Events to Clients Asynchronously](sseca.md)
+  * [Writing DRY Controllers with Responders](wdcwr.md)
