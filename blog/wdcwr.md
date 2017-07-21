@@ -128,3 +128,180 @@
 
 > 无论何时，你在控制器调用respond_with()方法，他都会调用ActionController::Responde类
 >无非是用ruby代码编写整个表。 让我们看一下ActionController::Responder的实现和如何修改他的行为
+
+
+
+######6.2　Exploring ActionController::Responder
+
+> 通过call应对任何响应,允许接收三个参数,作为一个响应者,传递给call方法的三个参数是当前控制器,资源(一个嵌套资源或一个数组资源),和一个包含选项的hasｈ,　传递给respond_with()所有选项转发给responder作为第三个参数。
+
+
+> 在 rails源码中，看到ActionController::Responder实现call()方法只有一行代码。
+
+    rails/actionpack/lib/action_controller/metal/responder.rb
+    def self.call(*args)
+     new(*args).respond
+    end
+
+> call方法传递这三个参数给ActionController::Responder初始化，然后调用respond()
+
+    rails/actionpack/lib/action_controller/metal/responder.rb
+    # Main entry point for responder responsible
+    # for dispatching to the proper format.
+    def respond
+    method = "to_#{format}"
+    respond_to?(method) ? send(method) : to_format
+    end
+    # HTML format does not render the resource,
+    # it always attempts to render a template.
+    def to_html
+    default_render
+    rescue ActionView::MissingTemplate => e
+    navigation_behavior(e)
+    end
+    # to_js simply tries to render a template.
+    # If no template is found, raises the error.
+    def to_js
+    default_render
+    end
+    # All other formats follow the procedure below. First we
+    # try to render a template. If the template is not available,
+    # we verify if the resource responds to :to_format and display it.
+    def to_format
+    if get? || !has_errors? || response_overridden?
+    default_render
+    else
+    display_errors
+    end
+    rescue ActionView::MissingTemplate => e
+    api_behavior(e)
+    end
+
+
+> respond()方法检查当前responder是否可以处理当前请求格式，对于请求格式调用对应方法，否则调用to_format().因为ActionController::Responder仅仅定义了to_html()和to_js()方法，仅有html和js请求有自定义行为，其他都是调用to_foramt()
+
+
+> 通过分析to_html和to_format()实现，我们看到前者使用navigational_behavior()响应后者使用api_behavior()响应，如果我们加入一个新的navigational格式到application里，例如MOBILE
+> responder将把他才能工作一个api格式， 而不是navigational(导航)格式，幸运的是,因为知道responder如何工作,我们让MOBILE请求使用导航行为，在初始化里，通过简单的将:to_mobile设置为:to_html别名
+
+>此外，注意，一个responder总是在回到api或者navigational之前在调用default_render()
+
+    rails/actionpack/lib/action_controller/metal/responder.rb
+      def to_html
+      default_render
+      rescue ActionView::MissingTemplate => e
+      navigation_behavior(e)
+      end
+
+> default_render()简单的尝试渲染一个模板，没有被渲染出来performed?()返回false，或则模板没有找到，抛出ctionView::MissingTemplate，异常被捕获，允许responders介入
+
+> 下面是rails如何实现navigational_behavior() and api_behavior()
+
+    rails/actionpack/lib/action_controller/metal/responder.rb
+    DEFAULT_ACTIONS_FOR_VERBS = {
+    post: :new,
+    patch: :edit,
+    put: :edit
+    }
+    # This is the common behavior for formats associated
+    # with browsing, like :html, :iphone and so forth.
+    def navigation_behavior(error)
+    if get?
+    raise error
+    elsif has_errors? && default_action
+    render :action => default_action
+    else
+    redirect_to navigation_location
+    end
+    end
+    # This is the common behavior for formats associated
+    # with APIs, such as :xml and :json.
+    def api_behavior(error)
+    raise error unless resourceful?
+    if get?
+    display resource
+    elsif post?
+    display resource, :status => :created, :location => api_location
+    else
+    head :no_content
+    end
+    end
+    def resourceful?
+    resource.respond_to?("to_#{format}")
+    end
+    def has_errors?
+    resource.respond_to?(:errors) && !resource.errors.empty?
+    end
+    def resource_location
+    options[:location] || resources
+    end
+    alias :navigation_location :resource_location
+    alias :api_location :resource_location
+    # Display is just a shortcut to render a resource with the current format.
+    #
+    #
+    display @user, status: :ok
+    #
+    # For XML requests it's equivalent to:
+    #
+    #
+    render xml: @user, status: :ok
+    #
+    # Options sent by the user are also used:
+    #
+    #
+    respond_with(@user, status: :created)
+    #
+    display(@user, status: :ok)
+    #
+    # Results in:
+    #
+    #
+    render xml: @user, status: :created
+    #
+    def display(resource, given_options={})
+    controller.render given_options.merge!(options).merge!(format => resource)
+    end
+
+
+> navigational_behavior()方法实现了上面的表格。对于一个get请求抛出一个missing-template错误，因为对于get请求的唯一选项是渲染一个模板，我们已经尝试渲染了，没有成功。
+
+> 对于其他的http请求类型,navigational行为检查是否资源有错误，如果有错误，并且默认action给定，他渲染通过DEFAULT_ACTIONS_FOR_VERBS hash指定的默认action，最后如果资源没有错误，重定向到资源，就是我们希望的成功的分支
+
+
+> api_behavior()实现方式不同，使用display()方法，合并传递给respond_with()方法，在调用render之前添加一个format。换句话说，我们调用respond_with()如下
+
+    respond_with @user, status: :created
+
+> 通过get请求，得到json格式，下面是控制器的响应
+
+    render json: @user, status: :created
+
+
+> 重要一点是rails的responders不会调用@user.to_json,他们简单的委派给render()方法，所以是:json渲染器，在writing the render那章节1.2小节讲到。这是重要的一点，因为人们可以添加渲染器，不用在工作的responder添加任何代码。
+
+
+> 最后，在responders中最后的一个定制能够在我们自己的控制器里完成，假设我们有一个responder工作的很好，除了一个特殊的action和格式，我们想让它行为不同，我们定制这个responder为这种情况，使用和在respond_to里一样的块api
+
+      def index
+      @users = User.all
+      respond_with(@users) do |format|
+      format.json { render json: @users.to_json(some_specific_option: true) }
+      end
+      end
+
+>这些可以工作，因为respond_with专递这个块给了format.json去响应，当请求格式是json时。
+> 前面章节看到default_render()方法响应片段调用这个块，无论block是否有效。
+
+>使用ActionController::Responder最大优点是,它集合了我们application应有恩恩每种行为。
+> 就是说。我们想立刻改变控制器的行为，我们仅仅需要创建我们自己的responder和配置rails使用它，如下
+
+    ApplicationController.responder = MyAppResponder
+
+> 此外，我们可以自定义responder为我们程序里指定的控制器
+
+    class UsersController < ApplicationController
+      self.responder = MyCustomUsersResponder
+    end
+
+> 让我们创建一个responder使用一些扩展性为和配置rails使用它
