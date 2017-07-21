@@ -100,3 +100,31 @@
 
 
 ######Resource Status
+
+> 如果我们分析create()action,代表了一个post请求，我们知道他有两个分支,一个是资源保存成功,另一个是失败，这些分支都使用了不同响应的方式.
+
+    def create
+    @user = User.new(user_params)
+    respond_to do |format|
+    if @user.save
+    format.html { redirect_to @user, notice: 'User was successfully created.' }
+    format.json { render action: 'show', status: :created, location: @user }
+    else
+    format.html { render action: "new" }
+    format.json { render json: @user.errors, status: :unprocessable_entity }
+    end
+    end
+    end
+
+> 资源状态决定了脚手架生成的控制器如何响应,在上面例子中，如果资源保存成功我们重定向,但是如果保存失败就渲染一个错误页面,返回相应错误,我们在update()action中也看到这个模式，update是通过patch和put请求调用
+
+
+> 虽然脚手架生成的destroy()action没有依赖资源状态,由于resource.destroy返回false，我们或许最后需要手动处理这种情况,例如,假设一个组设置有几个管理者，因为一个组需要至少一个管理者，我们实现一个before_destroy()回调，检查每次尝试删除管理者的操作，如果条件不存在，回调和destroy()方法都返回false. 这种新场景，我们需要手动在控制器里处理,通常是修改destroy()action来展示一个flash message,并且重定向到group页面， 换句话说,即使脚手架生成的destroy()action不需要依赖资源状态, delete请求或许需要。
+
+> 也就是说控制器为了响应post,put和delete请求，需要知道资源状态.我们的表格描述了这些新场景
+>填充了每个请求的类型,http请求类型，和资源状态
+
+![](15.png)
+
+> 无论何时，你在控制器调用respond_with()方法，他都会调用ActionController::Responde类
+>无非是用ruby代码编写整个表。 让我们看一下ActionController::Responder的实现和如何修改他的行为
