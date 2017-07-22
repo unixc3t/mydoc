@@ -505,3 +505,74 @@
 > 并且返回false，当username是“Undestroyable”时。
 
 > 我们需要添加错误信息到model里，提示responder有一些错误。伴随最后的修改，我们的测试通过了。这还有其他特性我们可以添加到flash responder里，但是让我们继续，将我们的responder变成更好的http公民
+
+
+###### 6.4 HTTP Cache Responder
+
+> rails自1.2版本就开始支持rest,从此以后开发api变得越来越简单， 然而，你的程序不断成长，你或许不得不实现更多的api，并且优化请求数量。
+
+> 当你暴露一个api，通常客户端到服务器请求一个资源需要好几次，并且客户端总是得到一样的响应，因为请求的资源没有改变.这种情况，服务端浪费了时间去渲染一样的资源一遍又一遍。客户端解析一样的资源结果发现没有任何改变
+
+
+>幸运的是,http1.1指定了一部分专门用于缓存。前面的问题被简单的解决了，服务端添加一个Last-Modified丢信息在响应中，使用一个时间戳代表了文件被修改的最后时间，客户端应该添加一个使用时间戳的If-Modified-Since头信息，如果资源没有改变，服务器返回一个304 Not modified状态，不需要渲染任何资源，接收到304状态，客户端知道什么都没改变
+>如下图所示
+
+![](16.png)
+
+> 照例,我们通过编写测试来实现，下面至少有三个场景需要重点考虑
+
+* 当If-Modified-Since没有提供的时候，我们的控制器正常响应但是要添加一个last-modified头信息
+* 当if-modified-Since提供了并且是最新的修改时间，我们的控制器返回一个状态码304，并且是一个空body
+
+* 当If-Modified-Since提供并且不是最新修改时间，我们控制器正常响应，但是添加一个新的last-Modified时间戳头信息
+
+> 编写这些测试，我们需要修改一些请求header和校验一些响应头信息被适当的设置了。让我们再一次使用UsersController，来支持我们的测试
+
+![](17.png)
+![](18.png)
+
+> rails提供了几个https上的帮助方法，并且我们使用给他们常见一个新的模块叫做Responders::HttpCache，自动添加http缓存功能给所有get请求
+
+    responders/2_http_cache/lib/responders/http_cache.rb
+      module Responders
+      module HttpCache
+      delegate :response, to: :controller
+      def to_format
+      return if do_http_cache? && do_http_cache!
+      super
+      end
+      private
+      def do_http_cache!
+      response.last_modified ||= max_timestamp if max_timestamp
+      head :not_modified if fresh = request.fresh?(response)
+      fresh
+      end
+      # Iterate through all resources and find the last updated.
+      def max_timestamp
+      @max_timestamp ||= resources.flatten.map do |resource|
+      resource.updated_at.try(:utc) if resource.respond_to?(:updated_at)
+      end.compact.max
+      end
+      # Just trigger the cache if it's a GET request and
+      # perform caching is enabled.
+      def do_http_cache?
+      get? && ActionController::Base.perform_caching
+      end
+      end
+      end
+
+> 我们的实现主要通过循环遍历所有给定资源和取回最后修改的一个时间戳,我们然后更新响应对象，如果请求时最新时间(资源没有被修改)我们返回304状态，给客户端，不渲染任何资源，因为to_format调用super前已经返回
+
+> 我们运行测试之前,我们需要require responders/http_cache并include Responders::HttpCache到我们的appResponder里，修改lib/responders.rb
+
+    responders/2_http_cache/lib/responders.rb
+    require "responders/flash"
+    require "responders/http_cache"
+    module Responders
+    class AppResponder < ActionController::Responder
+    include Flash
+    include HttpCache
+    end
+    end
+
+> 就这些了。我们的测试通过了，我们将flash和http缓存功能从控制器提取了出来，现在它可以自动处理我们的响应
