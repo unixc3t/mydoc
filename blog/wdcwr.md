@@ -304,4 +304,204 @@
       self.responder = MyCustomUsersResponder
     end
 
-> 让我们创建一个responder使用一些扩展性为和配置rails使用它
+> 让我们创建一个responder扩展一些行为和配置rails使用它
+
+######6.3　The Flash Responder
+
+> 结构化的控制器在create()和update()两个actions里使用falsh message，这些信息在多个控制器里十分类似，如果我们设置这些flash messages成为responder里的默认设置不是更好？但是仍然要提供一个良好的api修改它们？
+
+> 让我们使用国际化框架(i18n)实现这个特性,我们就可以简单的从yaml文件里查找flash message
+> 配置默认值,让他将来翻译这些信息成为可能，让我们使用rails plugin常见一个新项目叫做responders
+
+    $ rails plugin new responders
+
+
+> 让我们开始写一些测试，访问create,update()和destroy() actions,确保一些flash messages信息使我们期望的
+
+
+    responders/1_flash/test/responders/flash_test.rb
+    require "test_helper"
+    class FlashTest < ActionController::TestCase
+    tests UsersController
+    test "sets notice message on successful creation" do
+    post :create, user: { name: "John Doe" }
+    assert_equal "User was successfully created.", flash[:notice]
+    end
+    test "sets notice message on successful update" do
+    user = User.create!(name: "John Doe")
+    put :update, id: user.id, user: { name: "Another John Doe" }
+    assert_equal "User was successfully updated.", flash[:notice]
+    end
+    test "sets notice message on successful destroy" do
+    user = User.create!(name: "John Doe")
+    delete :destroy, id: user.id
+    assert_equal "User was successfully destroyed.", flash[:notice]
+    end
+    end
+
+> 这个测试基于一个已经存在的UsersController，我们可以通过调用生成器脚手架在test/dummy的虚拟application里定义这个控制器，当调用生成控制器时，我们可以跳过测试文件，保证不会和我们测试文件冲突
+
+    $ rails g scaffold User name:string --no-test-framework
+
+> 下一步运行迁移文件，设置我们的测试数据库
+
+    $ rake db:migrate db:test:clone
+
+> 注意,无论如何，脚手架生成器不会使用respnder api。让我们修改生成的控制器，让它使用respond_with().然后移除所有的falsh messages. 我们的responder将会自动设置他们。 下面是我们控制器修改后的样子.
+
+    responders/1_flash/test/dummy/app/controllers/users_controller.rb
+    class UsersController < ApplicationController
+      respond_to :html, :json
+      before_action :set_user, only: [:show, :edit, :update, :destroy]
+
+      def index
+        @users = User.all
+        respond_with(@users)
+      end
+
+      def show
+        respond_with(@user)
+      end
+      def new
+        @user = User.new
+        respond_with(@user)
+      end
+
+      def edit
+      end
+
+      def create
+        @user = User.new(user_params)
+        @user.save
+        respond_with(@user)
+      end
+
+      def update
+        @user.update(user_params)
+        respond_with(@user)
+      end
+
+      def destroy
+        @user.destroy
+        respond_with(@user)
+      end
+
+      private
+      # Use callbacks to share common setup or constraints between actions.
+      def set_user
+        @user = User.find(params[:id])
+      end
+
+      # Only allow a trusted parameter "white list" through.
+      def user_params
+        params.require(:user).permit(:name)
+      end
+    end
+
+> 控制器里的所有的actions都应该调用respond_with()方法，除了edit()action，这是因为edit()action仅被用来导航请求，主要负责显示修改资源的表单。
+
+> 当运行这些测试，失败了。并且提示下面信息
+
+    1) Failure:
+    test_sets_notice_message_on_successful_creation(FlashTest):
+    Expected: "User was successfuly created."
+      Actual: nil
+
+> 失败是意料之中，因为我们没有实现我们的responders,因为，因为这章我们要开发两个responders
+> 扩展,每个扩展作为一个模块， 允许开发者根据需求引入任何位置，我们第一个模块叫做Responders::Flash，它通过i18n框架得到falsh message
+
+> 假设一个请求携带有效参数到达控制器里的create()action，当respond_with()被调用并且没有flash message被设置。responder应该尝试寻找一个在控制器和action命名空间下的I18N message，例如 "flash.users.create.notice，如果一个i18n信息被找到，responder应该设置它为flash[:notice]的值，也会用在下次请求时显示
+
+>此外，如果请求到达UsersController#create，但是没有携带有效参数，创建用户无效，responder应该寻找一个"flash.users.create.alert" 使用flash[:alert]设置
+
+> 根据这些需求，我们编写responder::Falsh模块
+
+    responders/1_flash/lib/responders/flash.rb
+    module Responders
+    module Flash
+    def to_html
+    set_flash_message! unless get?
+    super
+    end
+    private
+    def set_flash_message!
+    status = has_errors? ? :alert : :notice
+    return if controller.flash[status].present?
+    message = i18n_lookup(status)
+    controller.flash[status] = message if message.present?
+    end
+    def i18n_lookup(status)
+    namespace = controller.controller_path.gsub("/", ".")
+    action
+    = controller.action_name
+    lookup = [namespace,status].join(".").to_sym
+    default = ["actions",action, status].join(".").to_sym
+    I18n.t(lookup, scope: :flash, default: default,
+          resource_name: resource.class.model_name.human)
+    end
+    end
+    end
+
+> 我们的模块重写了这个to_html行为，如果不是get请求我们就设置falsh message ，并且调用super,允许其他responder行为和其他扩展继续
+
+> 除了设置flash message信息是基于控制器命名空间,我们通过一个actions命名空间作为一个:default 选项给I18N.t，这允许I18N回头寻找"flash.actions.create.notice"，在没有找到"flash.users.create.notice"时。
+
+
+> 这种后退机制，让我们提供application范围内的默认信息，所以我们不需要在每个控制器里都重复我们自己，让我们看看默认的脚手架信息，在我们的插件里创建一个如下的yaml文件
+
+    responders/1_flash/lib/responders/locales/en.yml
+    en:
+      flash:
+        actions:
+          create:
+            notice: "%{resource_name} was successfully created."
+            alert: ""
+          update:
+            notice: "%{resource_name} was successfully updated."
+            alert: ""
+          destroy:
+            notice: "%{resource_name} was successfully destroyed."
+            alert: "%{resource_name} could not be destroyed."
+
+> 现在任何控制器都可以使用配置在YAML中的falsh信息,除非我们定义一个特殊key给控制器配置他自己的信息。 为了实现这个，我们使用I18N内插法，这允许我们使用 %{resource_name},在我们的消息里，当I18N调用时他可以通过传递给:resource_name的人类可读资源名替换
+
+
+> 为了最终使得我们测试通过,我们需要激活我们的Responders::Flash，使用猴子补丁替换rails的默认responder.让我们继承它，添加我们自己的定制，我们设置我们的新responders作为默认的，添加我们的YAML文件到I18N读取路径
+
+    responders/1_flash/lib/responders.rb
+    require "action_controller"
+    require "responders/flash"
+      module Responders
+        class AppResponder < ActionController::Responder
+          include Flash
+        end
+      end
+    
+    ActionController::Base.responder = Responders::AppResponder
+    require "active_support/i18n"
+    I18n.load_path << File.expand_path("../responders/locales/en.yml", __FILE__)
+
+
+> 运行测试套件，你会看到我们的responder正确的被激活并且使用了了yaml中的默认的falsh message，因为我们的测试仅仅断言了notice message，让我们编写一个额外的测试用来断言alert message，显示失败的情况
+
+    responders/1_flash/test/responders/flash_test.rb
+      test "sets alert messages from the controller scope" do
+      begin
+      I18n.backend.store_translations :en,
+      flash: { users: { destroy: { alert: "Cannot destroy!" } } }
+      user = User.create!(name: "Undestroyable")
+      delete :destroy, id: user.id
+      assert_equal "Cannot destroy!", flash[:alert]
+      ensure
+      I18n.reload!
+      end
+      end
+
+> 这个测试创建了一个资源，然后尝试销毁他，但是失败了，显示提示信息，资源不能被删除，和我们在
+> Aiming for an Active Model–Compliant API做的一样，我们使用了I18N api为失败场景即时存储翻译
+
+
+> 为了确保测试通过，让我们添加一个before_destory回掉函数，添加错误信息到@user.errors里
+> 并且返回false，当username是“Undestroyable”时。
+
+> 我们需要添加错误信息到model里，提示responder有一些错误。伴随最后的修改，我们的测试通过了。这还有其他特性我们可以添加到flash responder里，但是让我们继续，将我们的responder变成更好的http公民
