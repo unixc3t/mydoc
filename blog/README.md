@@ -1,6 +1,7 @@
 ## Summary
 
   * [澄清.gemspec和Gemfile角色作用](gemspec.md)
+  * [使用kerl安装erlang遇到的问题及解决办法](kerl.md)
   * [模块中代码的组织](modularcode.md)
   * [Class and Instance Variables In Ruby](caiv.md)
   * [Creating Our Own Renderer](coor.md)
@@ -9,3 +10,4 @@
   * [Sending Multipart Emails Using Template Handlers](sme.md)
   * [Streaming Server Events to Clients Asynchronously](sseca.md)
   * [Writing DRY Controllers with Responders](wdcwr.md)
+  
