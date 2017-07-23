@@ -710,3 +710,79 @@
   rails g responders:install
 
 > 现在当你生成任何新资源，都会使用我们刚刚安装的模板，这意味着rails脚手架灵活性不仅对于像haml和rspec这样rails扩展,也适用于application开发者，因为他们可以定制脚手架适应他们的工作流，app结构
+
+
+###### Generators and ORM Agnosticism
+
+> 我们已经讨论了Active model和他在orm中角色的不可知论。我们也讨论了生成器的钩子。提供给其他orm和钩入Model和脚手架的生成器,无论何时我们使用脚手架生成器，这两个角色互相交叉，rails提供了一个自定义api允许orm定义生成代码
+
+> rails控制器负责模型交互和传递需要的对象给视图，换句话说，控制器应该配合当前orm，同时从他哪里得到需要的信息,脚手架生成的控制器要依据使用的orm进行改变。rails解决这个问题，通过创建一个对象负责告诉脚手架生成器如何与orm交互。 基本的实现已经在rails源码中，我们看一下
+
+    rails/railties/lib/rails/generators/active_model.rb
+      module Rails
+      module Generators
+      class ActiveModel
+      attr_reader :name
+      def initialize(name)
+      @name = name
+      end
+      # GET index
+      def self.all(klass)
+      "#{klass}.all"
+      end
+      # GET show
+      # GET edit
+      # PATCH/PUT update
+      # DELETE destroy
+      def self.find(klass, params=nil)
+      "#{klass}.find(#{params})"
+      end
+      # GET new
+      # POST create
+      def self.build(klass, params=nil)
+      if params
+      "#{klass}.new(#{params})"
+      else
+      "#{klass}.new"
+      end
+      end
+      # POST create
+      def save
+      "#{name}.save"
+      end
+      # PATCH/PUT update
+      def update(params=nil)
+      "#{name}.update(#{params})"
+      end
+      # POST create
+      # PATCH/PUT update
+      def errors
+      "#{name}.errors"
+      end
+      # DELETE destroy
+      def destroy
+      "#{name}.destroy"
+      end
+      end
+      end
+      end
+
+> orm_class()指向了Rails::Generators::ActiveModel，并且orm_instance()指向了同样类的实例，所以
+> 无论何时我们调用orm_class.all("User")在模板里，它调用Rails::Generators::ActiveModel.all("User")，并且返回User.all和常规的active record行为一样
+
+> orm_instance()行为类类似，除了我们不需要传递资源名字作为参数，因为我们已经在初始化阶段做了，基于这个原因，orm_instance.save成功返回和user.save一样结果
+
+> 控制器和orm框架之间的交互都是通过Rails::Generators::ActiveModel,不可之论来自任何orm框架可以提供自己对这个类的实现。我们要做的是在orm生成器命名空间下，定义一个active model类，
+
+> 例如,dataMapper的find和update方法有不同的语法，所以我们需要继承Rails::Generators::ActiveModel
+> 实现新的api：
+
+    module DataMapper
+      module Generators
+        class ActiveModel < ::Rails::Generators::ActiveModel
+          def self.find(klass, params=nil)
+            "#{klass}.get(#{params})"
+          end
+        end
+      end
+    end
