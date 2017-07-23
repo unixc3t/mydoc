@@ -627,3 +627,86 @@
 > 让我们使用这个特性去定制脚手架默认使用respond_with()。
 
 ###### Using respond_with by Default
+
+> 在脚手架中使用respond_with()作为默认,让我们在程序Lib/templates放一个模板,为了避免每个新application都做这个操作，我们创建一个生成器,来拷贝这个文件到适当的位置.
+
+> 我们调用这个Responders::Generators::InstallGenerator并且实现它
+
+    responders/3_final/lib/generators/responders/install/install_generator.rb
+    module Responders
+    module Generators
+    class InstallGenerator < Rails::Generators::Base
+    source_root File.expand_path("../templates", __FILE__)
+    def copy_template_file
+    copy_file "controller.rb",
+    "lib/templates/rails/scaffold_controller/controller.rb"
+    end
+    end
+    end
+    end
+
+> 下面是我们生成器使用的模板
+
+    responders/3_final/lib/generators/responders/install/templates/controller.rb
+    <% module_namespacing do -%>
+    class <%= controller_class_name %>Controller < ApplicationController
+    before_action :set_<%= singular_table_name %>,
+    only: [:show, :edit, :update, :destroy]
+    # GET <%= route_url %>
+    def index
+    @<%= plural_table_name %> = <%= orm_class.all(class_name) %>
+    respond_with(@<%= plural_table_name %>)
+    end
+    # GET <%= route_url %>/1
+    def show
+    respond_with(@<%= singular_table_name %>)
+    end
+    # GET <%= route_url %>/new
+    def new
+    @<%= singular_table_name %> = <%= orm_class.build(class_name) %>
+    respond_with(@<%= singular_table_name %>)
+    end
+    # GET <%= route_url %>/1/edit
+    def edit
+    end
+    # POST <%= route_url %>
+    def create
+    @<%= singular_table_name %> = <%= orm_class.build(class_name,
+    "#{singular_table_name}_params") %>
+    @<%= orm_instance.save %>
+    respond_with(@<%= singular_table_name %>)
+    end
+    # PATCH/PUT <%= route_url %>/1
+    def update
+    @<%= orm_instance.update("#{singular_table_name}_params") %>
+    respond_with(@<%= singular_table_name %>)
+    end
+    # DELETE <%= route_url %>/1
+    def destroy
+    @<%= orm_instance.destroy %>
+    respond_with(@<%= singular_table_name %>)
+    end
+    private
+    # Use callbacks to share common setup or constraints between actions.
+    def set_<%= singular_table_name %>
+    @<%= singular_table_name %> = <%= orm_class.find(class_name, "params[:id]") %>
+    end
+    # Only allow a trusted parameter "white list" through.
+    def <%= "#{singular_table_name}_params" %>
+    <%- if attributes_names.empty? -%>
+    params[<%= ":#{singular_table_name}" %>]
+    <%- else -%>
+    params.require(<%= ":#{singular_table_name}" %>).
+    permit(<%= attributes_names.map { |name| ":#{name}" }.join(', ') %>)
+    <%- end -%>
+    end
+    end
+    <% end -%>
+
+> 上面的模板我们基于rails提供的模板修改,但是全部替换了respond_to来调用respond_with()。也使用了我们讨论的几个模板，除了orm_class()和orm_instance()方法，我们一会讲解
+
+> 到我们的dummy application里尝试这个新生成器,调用方式如下
+
+  rails g responders:install
+
+> 现在当你生成任何新资源，都会使用我们刚刚安装的模板，这意味着rails脚手架灵活性不仅对于像haml和rspec这样rails扩展,也适用于application开发者，因为他们可以定制脚手架适应他们的工作流，app结构
