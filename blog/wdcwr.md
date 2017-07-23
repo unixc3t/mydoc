@@ -576,3 +576,54 @@
     end
 
 > 就这些了。我们的测试通过了，我们将flash和http缓存功能从控制器提取了出来，现在它可以自动处理我们的响应
+
+
+#### More Ways to Customize Generators
+
+> 现在我们理解了responders如何工作了并且根据我们的需求修改它们，我们能感觉到信心，更多的使用它们，在我们的控制器里，这唯一问题脚手架生成器默认使用respond_to,没有使用responde_with()
+
+> 换句话说,in Generators' Hooks这章节,我们讨论如何定制生成器，对于定制控制器脚手架生成器他们必须作为一个回调,让我们看一下脚手架输出
+
+    invoke active_record
+    create db/migrate/20130415031520_create_users.rb
+    create app/models/user.rb
+    invoke resource_route
+    。。。
+
+> 每一个invoke输出，我们都可以重写， 这因为我们我们可以替换scaffold_controller生成器为另一个，根据我们的需求。
+
+> 然而,这个不是我们解决问题方案，作为替代，我们使用另一个rails生成器特性来定支模板，而不使用生成器回调
+
+###### Generators’ Source Path
+
+> 考虑rails生成器中的下面代码
+
+    copy_file "controller.rb", "app/controller/#{file_name}_controller.rb"
+
+> 它简单拷贝了controller.rb文件从生成器源目标到目的地。对于UserController变成app/controllers/users_controller.rb .
+
+> 然而一个生成器,不仅有一个源，在拷贝一个给定位置之前，生成器在几个地方搜索源文件，这个叫source paths,source_root(Creating Our First Generator)实际上是生成器查找模板的最后地方
+
+> 这个行为由Thor构建,但是rails非常漂亮的包装了它，自动的添加lib/templates目录到您的application到所有的生成器路径，这意味着，Rails::Generators::ScaffoldControllerGenerator在使用rails提供的之前，使用脚手架时总是试图找到一个模板在lib/templates/rails/scaffold_controller
+
+> 我们可以看到Rails::Generators::ScaffoldControllerGenerator的实现源码，可以简单看到这个逻辑，拷贝控制器模板。
+
+    rails/railties/lib/rails/generators/rails/scaffold_controller/scaffold_controller_generator.rb
+    module Rails
+    module Generators
+    class ScaffoldControllerGenerator < NamedBase
+    def create_controller_files
+    template "controller.rb", File.join("app/controllers", class_path,
+    "#{controller_file_name}_controller.rb")
+    end
+    end
+    end
+    end
+
+> 它使用叫做controller.rb的模板，位于railties/lib/rails/generators/rails/scaffold_controller/templates/controller.rb,根据这个源路径，如果我们在我们的application里放一个lib/templates/rails/scaffold_controller/controller.rb文件，rails将使用这个application文件替换那个rails提供的
+
+> 你可以加单的创建一个rails程序，放一个空的文件lib/templates/rails/scaffold_controller/controller.rb到你的应用程序里，然后运行脚手架命令，你会发现控制器脚手架创建的是一个空的文件。
+
+> 让我们使用这个特性去定制脚手架默认使用respond_with()。
+
+###### Using respond_with by Default
