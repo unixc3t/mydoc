@@ -54,7 +54,7 @@
       end
     end
   
-> 上面代码最上面。我们声明了控制器影响的格式, 将所有工作都委派给respond_with()，使用这个赶紧的api，我们重写了我们的actions。
+> 上面代码最上面。我们声明了控制器响应的格式, 将所有工作都委派给respond_with()，使用这个干净的api，我们重写了我们的actions。
 
 
 > 在这章，我们将学习responder的工作方式，定制他们自动处理http缓存和flash信息,最后定制脚手架生成器使用respond_with()作为默认,
@@ -146,36 +146,38 @@
 > call方法传递这三个参数给ActionController::Responder初始化，然后调用respond()
 
     rails/actionpack/lib/action_controller/metal/responder.rb
-    # Main entry point for responder responsible
-    # for dispatching to the proper format.
-    def respond
-    method = "to_#{format}"
-    respond_to?(method) ? send(method) : to_format
-    end
-    # HTML format does not render the resource,
-    # it always attempts to render a template.
-    def to_html
-    default_render
-    rescue ActionView::MissingTemplate => e
-    navigation_behavior(e)
-    end
-    # to_js simply tries to render a template.
-    # If no template is found, raises the error.
-    def to_js
-    default_render
-    end
-    # All other formats follow the procedure below. First we
-    # try to render a template. If the template is not available,
-    # we verify if the resource responds to :to_format and display it.
-    def to_format
-    if get? || !has_errors? || response_overridden?
-    default_render
-    else
-    display_errors
-    end
-    rescue ActionView::MissingTemplate => e
-    api_behavior(e)
-    end
+      # Main entry point for responder responsible
+      # for dispatching to the proper format.
+
+      def respond
+        method = "to_#{format}"
+        respond_to?(method) ? send(method) : to_format
+      end
+
+      # HTML format does not render the resource,
+      # it always attempts to render a template.
+      def to_html
+        default_render
+        rescue ActionView::MissingTemplate => e
+        navigation_behavior(e)
+      end
+      # to_js simply tries to render a template.
+      # If no template is found, raises the error.
+      def to_js
+        default_render
+      end
+      # All other formats follow the procedure below. First we
+      # try to render a template. If the template is not available,
+      # we verify if the resource responds to :to_format and display it.
+      def to_format
+        if get? || !has_errors? || response_overridden?
+          default_render
+        else
+          display_errors
+        end
+        rescue ActionView::MissingTemplate => e
+        api_behavior(e)
+      end
 
 
 > respond()方法检查当前responder是否可以处理当前请求格式，对于请求格式调用对应方法，否则调用to_format().因为ActionController::Responder仅仅定义了to_html()和to_js()方法，仅有html和js请求有自定义行为，其他都是调用to_foramt()
@@ -188,9 +190,9 @@
 
     rails/actionpack/lib/action_controller/metal/responder.rb
       def to_html
-      default_render
-      rescue ActionView::MissingTemplate => e
-      navigation_behavior(e)
+        default_render
+        rescue ActionView::MissingTemplate => e
+        navigation_behavior(e)
       end
 
 > default_render()简单的尝试渲染一个模板，没有被渲染出来performed?()返回false，或则模板没有找到，抛出ctionView::MissingTemplate，异常被捕获，允许responders介入
@@ -198,70 +200,66 @@
 > 下面是rails如何实现navigational_behavior() and api_behavior()
 
     rails/actionpack/lib/action_controller/metal/responder.rb
-    DEFAULT_ACTIONS_FOR_VERBS = {
-    post: :new,
-    patch: :edit,
-    put: :edit
-    }
-    # This is the common behavior for formats associated
-    # with browsing, like :html, :iphone and so forth.
-    def navigation_behavior(error)
-    if get?
-    raise error
-    elsif has_errors? && default_action
-    render :action => default_action
-    else
-    redirect_to navigation_location
-    end
-    end
-    # This is the common behavior for formats associated
-    # with APIs, such as :xml and :json.
-    def api_behavior(error)
-    raise error unless resourceful?
-    if get?
-    display resource
-    elsif post?
-    display resource, :status => :created, :location => api_location
-    else
-    head :no_content
-    end
-    end
-    def resourceful?
-    resource.respond_to?("to_#{format}")
-    end
-    def has_errors?
-    resource.respond_to?(:errors) && !resource.errors.empty?
-    end
-    def resource_location
-    options[:location] || resources
-    end
-    alias :navigation_location :resource_location
-    alias :api_location :resource_location
-    # Display is just a shortcut to render a resource with the current format.
-    #
-    #
-    display @user, status: :ok
-    #
-    # For XML requests it's equivalent to:
-    #
-    #
-    render xml: @user, status: :ok
-    #
-    # Options sent by the user are also used:
-    #
-    #
-    respond_with(@user, status: :created)
-    #
-    display(@user, status: :ok)
-    #
-    # Results in:
-    #
-    #
-    render xml: @user, status: :created
-    #
-    def display(resource, given_options={})
-    controller.render given_options.merge!(options).merge!(format => resource)
-    end
+      DEFAULT_ACTIONS_FOR_VERBS = {
+        post: :new,
+        patch: :edit,
+        put: :edit
+      }
+      # This is the common behavior for formats associated
+      # with browsing, like :html, :iphone and so forth.
+      def navigation_behavior(error)
+        if get?
+          raise error
+        elsif has_errors? && default_action
+          render :action => default_action
+        else
+          redirect_to navigation_location
+        end
+      end
+      # This is the common behavior for formats associated
+      # with APIs, such as :xml and :json.
+      def api_behavior(error)
+          raise error unless resourceful?
+          if get?
+            display resource
+          elsif post?
+            display resource, :status => :created, :location => api_location
+          else
+            head :no_content
+          end
+      end
+      def resourceful?
+        resource.respond_to?("to_#{format}")
+      end
+      def has_errors?
+        resource.respond_to?(:errors) && !resource.errors.empty?
+      end
+
+      def resource_location
+        options[:location] || resources
+      end
+      alias :navigation_location :resource_location
+      alias :api_location :resource_location
+      # Display is just a shortcut to render a resource with the current format.
+      #
+      #display @user, status: :ok
+      #
+      # For XML requests it's equivalent to:
+      #
+      #render xml: @user, status: :ok
+      #
+      # Options sent by the user are also used:
+      #
+      #respond_with(@user, status: :created)
+      #display(@user, status: :ok)
+      #
+      # Results in:
+      #
+      #render xml: @user, status: :created
+      #
+      def display(resource, given_options={})
+        controller.render given_options.merge!(options).merge!(format => resource)
+      end
 
 
 > navigational_behavior()方法实现了上面的表格。对于一个get请求抛出一个missing-template错误，因为对于get请求的唯一选项是渲染一个模板，我们已经尝试渲染了，没有成功。
@@ -293,7 +291,7 @@
 >这些可以工作，因为respond_with专递这个块给了format.json去响应，当请求格式是json时。
 > 前面章节看到default_render()方法响应片段调用这个块，无论block是否有效。
 
->使用ActionController::Responder最大优点是,它集合了我们application应有恩恩每种行为。
+>使用ActionController::Responder最大优点是,它集合了我们application应有每种行为。
 > 就是说。我们想立刻改变控制器的行为，我们仅仅需要创建我们自己的responder和配置rails使用它，如下
 
     ApplicationController.responder = MyAppResponder
