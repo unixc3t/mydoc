@@ -2,6 +2,7 @@
 
   * [澄清.gemspec和Gemfile角色作用](gemspec.md)
   * [使用kerl安装erlang遇到的问题及解决办法](kerl.md)
+  * [idea配置erlang开发环境](config_erlang.md)
   * [模块中代码的组织](modularcode.md)
   * [Class and Instance Variables In Ruby](caiv.md)
   * [Creating Our Own Renderer](coor.md)
