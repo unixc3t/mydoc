@@ -142,7 +142,7 @@
     1 runs, 1 assertions, 0 failures, 0 errors, 0 skips
 
 
-> 这个测试,定义在test/pdf_renderer_test.rb中，断言我们的插件定义在一个叫做PdfRenderer模块下
+> 这个测试,定义在test/pdf_renderer_test.rb中，断言我们的插件定义了一个叫做PdfRenderer模块
 
     require 'test_helper'
 
@@ -351,36 +351,36 @@
       _render_template(options)
     end
 
-> 抽象控制器渲染栈负责格式化你提供的参数和选项，转换options为actionView::Renderer#render()接受的一个hash，然后最后渲染模板，堆栈中的每个方法在整个责任中起着特定的作用。这些方法可以是
-> 私有的(有下划线)或者公共的api
+> Abstract Controller的渲染栈负责格式化你提供的参数和选项，转换为actionView::Renderer#render()可以接受的一个hash，然后最后渲染模板，堆栈中的每个方法在整个过程中起着自己的作用。这些方法是
+> private(有下划线)或者部分是public
 
-> 首先栈中第一个相关方法就是_normalize_args()，被_normalize_render()调用 转换用户提供的
-> 参数为一个hash, 这就允许render方法以render(:new)方式调用，_normalize_args()转换成
+> 首先栈中第一个相关方法就是_normalize_args()，被_normalize_render()调用，将用户提供的
+> 参数转换为一个hash, render方法以render(:new)方式被调用，_normalize_args()转换成
 > render(action: "new"),_normalize_args返回这个hash然后被_normalize_options格式化
 > 在AbstractController::Rendering#_normalize_options()中没有太多的格式化, 因为他是
 > 基础模块，但是它转换render(partial:true)为 render(partial: action_name),所以
-> 无论何时你给定 partial:true在 show() aciton中,它都变成partial：“show”。
+> 无论何时在show()aciton中你给定 partial:true,它都变成partial：“show”。
 
 > 在格式化后，render_to_body()被调用，实际上渲染从这才开始, 第一步处理所有选项，对视图没啥意义，使用_process_options()方法，虽然AbstractController::Rendering#_process_options()
 > 是一个空方法, 我们可以用几个例子观察ActionController::Rendering#_process_options()到底做了什么， 例如 在控制器中，我们允许下面这样调用
 
     render template: "shared/not_authenticated", status: 401
 
-> 这个:status选项对试图没有意义，因为status是指http相应状态，所以ActionController::Rendering#_process_options() 负责处理相应这个选项和其他
+> 这个:status选项对视图没有意义，因为status是指http响应状态，所以ActionController::Rendering#_process_options() 负责处理这个选项和其他
 
-> 在选项处理后，_render_template()被调用，并且不同的对象开始合作，实际上，ActionView::Renderer实例，调用view_renderer创建，render()方法在实力上调用并传递两个参数
-> view_context和格式化后的选项参数的hash结构
+> 在选项处理后，_render_template()被调用，并且不同的对象开始合作，实际上，ActionView::Renderer实例，由调用view_renderer来创建，然后在这个实例上调用render()方法,并传递两个参数
+> 这两个参数是view_context和格式化后的里面是options的hash
 
     rails/actionpack/lib/abstract_controller/rendering.rb
     view_renderer.render(view_context, options)
 
 
-> view context是 ActionView::Base的实例， 这是我们模板被执行的上下文，当我们在模板里调用link_to()，它之所以会工作，是因为一个方法在ActionView::Base内部是有效的，当实例化时，view
->context 收到view_assigns()作为参数，assigns 引用了控制器的一组变量，这些变量在视图中可以访问。这就意味着无论生么时候，你设置一个实例变量在控制器里例如 @posts = Post.all，@post被标记成 assign ，可以在视图中使用
+> view context是 ActionView::Base的实例， 这是我们模板被赋值的地方，当我们在模板里调用link_to()，它之所以会工作，是因为一个方法在ActionView::Base内部是有效的，当实例化时，view
+>context接收view_assigns()返回值作为参数，assigns引用了控制器的一组变量，这些变量在视图中可以访问。这就意味着无论生么时候，你设置一个实例变量在控制器里例如 @posts = Post.all，@post被标记成 assign ，可以在视图中使用
 
 > 此时，重要的关系翻转发生在rails 2.3和rails3.0, 在前者中，视图负责从控制器检索分配变量，而后者控制器告诉试图使用哪些变量
 
-> 假设，我们想让一个控制器不发送任何实例变量给试图, 在rails 2.3中因为试图自动从控制器中拉取所有实例，为了实现我们的目的，我们要么阻止使用实例变量，要么移除控制器中所有实例变量在渲染模板之前。在rails 3和以后，这个由控制器处理，我们仅仅需要重写view_assigns()方法，返回一个空
+> 假设，我们想让一个控制器不发送任何实例变量给试图, 在rails 2.3中因为试图自动从控制器中拉取所有实例，为了实现我们的目的，我们要么阻止使用实例变量，要在渲染模板之前,么移除控制器中所有实例变量。在rails 3和以后，这个由控制器处理，我们仅仅需要重写view_assigns()方法，返回一个空
 >hash
 
     class UsersController < ApplicationController
@@ -392,23 +392,23 @@
 
 > 通过返回一个空的hash， 我们确保没有任何一个action传值给试图
 
-> 共同使用view context和格式化的参数hash，我们的ActionView::Renderer实例拥有的所有东西
-> 有需要翻找一个模板，基于选项，最后在view context里渲染
+> 使用view context和格式化的参数hash，我们的ActionView::Renderer实例拥有的所有东西
+> 它需要找到一个模板，基于选项，最后在view context里渲染
 
-> 模块和良好的站设计，允许任何回调加入到渲染处理过程中,加入自己的特性,当我们在AbstractController::Render顶部引入AbstractController::Layouts，这个渲染栈，被扩展成
+> 模块化的栈设计，允许任何回调加入到渲染处理过程中,加入自己的特性,当我们在AbstractController::Render顶部引入AbstractController::Layouts，这个渲染栈，被扩展成
 >如下图所示
 
 ![](02.png)
 
 > AbstractController::Layouts简单的覆盖了_normalize_options(),支持了:layout选项
-> 在没有：layout选项的时候调用render， 可以根据开发人员在控制器类级别配置的值自动设置。
-> Action Controller更多集成Abstract Controller渲染栈，添加和处理选项，仅仅在控制器域中
+> 如果调用render()时没有:layout被设置， 可以根据开发人员在控制器类级别配置的值自动设置。
+> Action Controller进一步扩展Abstract Controller渲染栈，添加和处理选项，仅仅在控制器域中起作用
 
 > 这些扩展分为四个主要模块
 
-* ActionController::Rendering : 覆盖render()检查，如果调用两次，就跑出DoubleRenderError,如果覆盖了，也覆盖_process_options() 处理的选项 例如 :location , :status , and :content_type
+* ActionController::Rendering : 覆盖render()检查是否被调用两次，如果调用两次，就抛出DoubleRenderError，也覆盖_process_options() 处理的选项 例如 :location , :status , and :content_type
 
-* ActionController::Renderers :加入我们这章使用的api，允许触发特殊行为支持，当给定一个特殊的key时。如(such as :pdf)
+* ActionController::Renderers :加入我们这章使用的api，允许当给定一个特殊的key时，触发特殊行为支持。如(such as :pdf)
 
 * ActionController::Instrumentation :重载render()方法，可以测量花了多少时间在渲染栈上
 
@@ -418,7 +418,7 @@
 
 ![](03.png)
 
-> 现在我们知道了render如何工作，我们也理解了render_to_string()如何工作，让我们看一下它的定义
+> 现在我们知道了render如何工作，我们准备去理解render_to_string()如何工作，让我们看一下它的定义
 
     rails/actionpack/lib/abstract_controller/rendering.rb
     def render_to_string(*args, &block)
@@ -428,7 +428,7 @@
 
 > 首先 render_to_string()看起来与render()方法类似， 仅有一点不同，render_to_string()没有存储被渲染的模板作为response body， 然而当我们分析整个渲染栈的时候，我们看到一些Action Controller 模块重载了，render()，添加行为，没有对render_to_string()进行重写
 
-> 例如, 使用render_to_string()在我们的渲染器中，我们确保instrumentation 时间不会触发量词，并且不会抛出重复渲染错误， 因为这些功能仅仅被加入到render方法中。
+> 例如, 使用render_to_string()在我们的渲染器中，我们确保instrumentation事件不会被触发两次，并且不会抛出重复渲染错误， 因为这些功能仅仅被加入到render方法中。
 
 > 在一些其他例子中，render_to_string()或许被重载,当我们使用Action Controller时，当模板被流处理时,response body可以作为另一个对象，不是字符串，基于这个原因，ActionController::Rendering 覆盖render_to_string()总是返回字符串如他的名字所示
 
