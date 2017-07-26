@@ -1,4 +1,4 @@
-#### Create Our Own Render
+## Create Our Own Render
 
 > 像大多数web框架一样,rails使用model-view-controller(mvc)结构模式来组织我们的代码,controller通常负责采集来自我们model的信息，然后将数据发送给view来渲染,在其他场合,model负责展示自己,view并不会参与到请求中,这通常发生在json请求中, 下面的index action描述了这两个场景
 
@@ -444,8 +444,8 @@
     pdf.text render_to_string({})
     send_data(pdf.render, filename: "contents.pdf",disposition: "attachment")
 
-> 当我们使用一个空的hash调用render_to_string(),这个_normalize_options() 方法在渲染栈中删除这个空的hash，
-> 然后使用当前action名字一样的模板进行渲染，最后，render_to_string()传递template: "#{controller_name}/#{action_name}"给view-renderer对象
+> 当我们使用一个空的hash调用render_to_string(),这个_normalize_options() 方法在渲染栈中发现这个空的hash，
+> 然后使用当前action名字相同的模板进行渲染，最后，render_to_string()传递template: "#{controller_name}/#{action_name}"给view-renderer对象
 
 >事实上,我们的渲染器基于render_to_string(),允许我们使用下面的选项
 
@@ -457,7 +457,7 @@
     pdf.text render_to_string(template: "path/to/template")
     send_data(pdf.render, filename: "contents.pdf",disposition: "attachment")
   
-  > 这次rednder_to_string()接收一个明确的模板来渲染，最后为了完成我们的渲染器，我们加一个测试确认可以选择模板来渲染
+  > 这次rednder_to_string()接收一个确定模板来渲染，最后为了完成我们的渲染器，我们加一个测试确认可以选择模板来渲染
   > 我们测试调用一个新的action在HomeController，使用:pdf和:template调用
 
       pdf_renderer/test/dummy/app/controllers/home_controller.rb
@@ -472,12 +472,12 @@
   > 然后访问/another.pdf 确认一个pdf被返回
 
       test "pdf renderer uses the specified template" do
-      get another_path(format: :pdf)
-      assert_match "PDF", response.body
-      assert_equal "binary", headers["Content-Transfer-Encoding"]
-      assert_equal "attachment; filename=\"contents.pdf\"",
-      headers["Content-Disposition"]
-      assert_equal "application/pdf", headers["Content-Type"]
+        get another_path(format: :pdf)
+        assert_match "PDF", response.body
+        assert_equal "binary", headers["Content-Transfer-Encoding"]
+        assert_equal "attachment; filename=\"contents.pdf\"",
+        headers["Content-Disposition"]
+        assert_equal "application/pdf", headers["Content-Type"]
       end
 
 ##### 1.5 略
