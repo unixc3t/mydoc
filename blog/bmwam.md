@@ -1,15 +1,15 @@
 ### Building Models with Active Model
 
-> 前面章节，我们简要的谈论了Abstract Controller和如何从Action Mailer 和 Action Controller解耦开始减少重复代码，现在我们讨论Active Model
+> 前面章节，我们简要的谈论了Abstract Controller和它如何从Action Mailer 和 Action Controller解耦减少重复代码，现在我们讨论Active Model,也类似
 
-> Active Model 原本用来存放Active Record和Acitve REsource共享的行为,和Abstract Controller一样，需要的功能可以根据选择引入你需要的模块。 Active Model也负责定义程序接口 提供给controllers和views，所以其他orm可以使用active model确保rails行为和使用active record一样
+> Active Model 原本用来存放Active Record和Acitve REsource共享的行为,和Abstract Controller一样，需要的功能可以根据选择引入你需要的模块。 Active Model也负责定义程序接口 提供给controllers和views，所以其他orm使用active model确保rails行为和它使用active record一样
 
 > 让我们通过编写一个mail form 插件来了解Active model,我们将会使用controllers和views， mail form目的是接收一组hash参数,通过post 请求传过来的，我们验证他们，然后将他们发送到指定邮件地址, 这种抽象将允许我们在几分钟内创建完整功能的联系人表单！
 
 
 ##### 2.1 Creating Our Model
 
-> Mail Form 对象属于model-view-controller结构中Model那部分,作为接收从表单发送信息的接受者和通过业务模型提交到指定存储容器, 让我们构造MailForm::Base以Active Record的工作方式,我们提供了一个类名MailForm::Base的类，
+> Mail Form 对象属于model-view-controller结构中Model那部分,接收从表单发送的信息并且发送到业务模型指定接收者,让我们以Active Record的工作方式构造MailForm::Base,我们提供了一个类名MailForm::Base的类，
 > 包含了最需要的特性，指定属性的能力,与rails form无缝集成， 和我们前面章节做的一样，我们使用rails plugin 创建新插件
 
     rails plugin new mail_form
@@ -48,36 +48,37 @@
       end
     end
 
-> 我们同时委派给attr_accessor()来实现 attributes方法 在我们再次运行测试之前，我们需要确保MailForm::Base被加载, 一种办法是直接使用require 'mail_form/base'在lib/mail_form.rb中，另一种是使用ruby的autoload()替代
+> 我们委派给attr_accessor()来实现 attributes方法 在我们再次运行测试之前，我们需要确保MailForm::Base被加载, 一种办法是直接使用require 'mail_form/base'在lib/mail_form.rb中，另一种是使用ruby的autoload()替代
 
     mail_form/lib/mail_form.rb
     module MailForm
       autoload :Base, "mail_form/base"
     end
 
-> autoload()允许我们延迟加载一个常量,当第一次引用他的时候, 所以我们备注MailForm为一个叫做Base的常量,定义在
-> mail_form/base.rb中，当MailForm::Base被第一次引用时,ruby读取这个mail_form/base.rb文件，这是一种惯用法，被用于ruby gem或者rails自己用来快速加载，不需要预先马上将所有东西都加载
+> 当第一次引用他的时候，autoload()允许我们延迟加载一个常量, 所以我们将定义在mail_form/base.rb中的MailForm备注为一个叫做Base的常量，当MailForm::Base被第一次引用时,ruby读取这个mail_form/base.rb文件，这是一种惯用法，被用于ruby gem或者rails自己用来快速加载，不需要预先马上将所有东西都加载
 
-> 使用autoload()，我们的实测通过了，我们有了一个拥有attributes的简单模型， 目前，我们没有使用任何active model的特性，
+> 通过使用autoload()，我们的实测通过了，我们有了一个拥有attributes的简单模型， 目前，我们没有使用任何active model的特性，
 
 
 ###### Adding Attribute Methods
 
-> ActiveModel::AttributeMethods 是一个模块,追踪定义的属性,允许我们使用通用的行为动态定义他们，为了展示是如何工作的，我们定义两个快捷方法，clear_name()和clear_email()，用来清除关联的属性值，让我们写一个测试
+> ActiveModel::AttributeMethods 是一个模块,追踪定义的属性,允许我们使用供用的行为动态定义他们，为了展示是如何工作的，我们定义两个快捷方法，clear_name()和clear_email()，用来清除关联的属性值，让我们写一个测试
 
     mail_form/test/mail_form_test.rb
     test "sample mail can clear attributes using clear_ prefix" do
       sample = SampleMail.new
       sample.name  = "User"
       sample.email   = "user@example.com"
+
       assert_equal "User", sample.name
       assert_equal "user@example.com", sample.email
    
     
-        sample.clear_name
-        sample.clear_email
-        assert_nil sample.name
-        assert_nil sample.email
+      sample.clear_name
+      sample.clear_email
+      
+      assert_nil sample.name
+      assert_nil sample.email
     end
 
 
@@ -87,27 +88,28 @@
 
     module MailForm
       class Base
-      include ActiveModel::AttributeMethods
-      attribute_method_prefix 'clear_'
-        # 1) attribute methods behavior
-        # 2) clear_ is attribute prefix
-         def self.attributes(*names)
-         attr_accessor(*names)
+        include ActiveModel::AttributeMethods  # 1) attribute methods behavior
+        attribute_method_prefix 'clear_'       # 2) clear_ is attribute prefix
+        
+        def self.attributes(*names)
+          attr_accessor(*names)
 
-        3) Ask to define the prefix methods for the given attribute names
-        define_attribute_methods(names)
-      end
-      protected
-        # 4) Since       we declared a "clear_" prefix, it expects to have a
+          3) Ask to define the prefix methods for the given attribute names
+          define_attribute_methods(names)
+        end
+
+        protected
+        # 4) Since we declared a "clear_" prefix, it expects to have a
         # "clear_attribute" method defined, which receives an attribute
         # name and implements the clearing logic.
+
         def clear_attribute(attribute)
           send("#{attribute}=", nil)
         end
       end
-      end
+    end
 
-> 运行测试,所有测试都应该全部通过,ActiveModel::AttributeMethods使用Method_missing()编译clear_name和clear_email()方法，当他们第一次被访问的时候，他们的实现是调用clear_attribute()传递属性名作为参数
+> 运行测试,所有测试都应该全部通过,当他们第一次被访问的时候,ActiveModel::AttributeMethods使用Method_missing()编译clear_name和clear_email()方法，他们的实现是调用clear_attribute()并传递属性名作为参数
 
 > 如果你想定义后缀方法替代前缀clear_，我们需要使用attribute_method_suffix()方法，用所选择的后缀逻辑实现该方法，下面例子我们实现了name?()和email?()方法，如果相关的属性值存在就返回true，测试如下
 
@@ -127,9 +129,9 @@
     module MailForm
       class Base
         include ActiveModel::AttributeMethods
-        attribute_method_prefix 'clear_'
-        # 1) Add the attribute suffix
-        attribute_method_suffix '?'
+        attribute_method_prefix 'clear_' 
+        
+        attribute_method_suffix '?' # 1) Add the attribute suffix
 
           def self.attributes(*names)
             attr_accessor(*names)
@@ -160,26 +162,26 @@
       end
     end
 
-> active record广泛的使用了属性方法，一个例子就是attribute_before_type_cast()方法，使用了_before_type_cast作为后缀，返回流数据，将接收到表单的数据， 脏功能检查，也是active modeld的一部分，
-> 基于顶部ActiveModel::AttributeMethods和定义几个方法，例如 attribute_changed?() , reset_attribute!() ,等等，你可以看一下源码的脏实现代码
+> active record广泛的使用了属性方法，一个例子就是attribute_before_type_cast()方法，使用了_before_type_cast作为后缀，将接收到表单的数据，返回流数据，这个肮脏的功能，也是active modeld的一部分，
+> 基于ActiveModel::AttributeMethods构建和定义几个方法，例如 attribute_changed?() , reset_attribute!() ,等等，你可以看一下源码的实现代码
 
 
 ###### Aiming for an Active Model–Compliant API
 
 > 即使我们加入了属性到我们的models里用来存储form数据，我们需要确保我们的模型兼容active model api, 否则，就不能在controller和views里使用
 
-> 像往常一样，我们将实现兼容，通过测试驱动开发，除了这次我们不需要编写测试,rails已经提供了一个叫ActiveModel::Lint::Tests模块，当我们included时，这个模块定义了几个测试断言，active model
->都需要兼容这些api，这些测试都期望一个叫做@model实例变量，我们在这个对象上进行断言，在我们的例子里，@model应该包含一个SampleMail实例,如果MailForm::Base是兼容的这个SampleMail也会被兼容，
+> 像往常一样，我们通过测试驱动开发将实现兼容，除了这次我们不需要编写测试,rails已经提供了一个叫ActiveModel::Lint::Tests模块，当我们included时，这个模块定义了几个测试断言，active model中都需要这些方法存在
+>都需要兼容这些api，这些测试都期望一个叫做@model实例变量，我们在这个对象上进行断言，在我们的例子里，@model应该引用一个SampleMail实例,如果MailForm::Base是兼容的这个SampleMail也会被兼容，
 > 让我们创建一个新的测试文件叫做test/compliance_test.rb
 
 
     require 'test_helper'
-      require 'fixtures/sample_mail'
+    require 'fixtures/sample_mail'
        class ComplianceTest < ActiveSupport::TestCase
-       include ActiveModel::Lint::Tests
-      def setup
-      @model = SampleMail.new
-      end
+          include ActiveModel::Lint::Tests
+          def setup
+             @model = SampleMail.new
+          end
     end
 
 > 当我们运行rake test时，我们得到几个失败结果，原因是
@@ -192,14 +194,16 @@
         self
     end
 
-> 虽然我们可以添加方法到MailForm::Base里面，我们自己不会去实现它，相反，我们引入 ActiveModel::Conversion
-> 来实现 to_model正如我们刚才讨论的，active Model还需要3个方法to_key() , to_param() , and to_partial_path() 
+> 虽然我们可以添加方法到MailForm::Base里面，我们自己不会去实现它，相反，正如我们刚才讨论的，我们引入 ActiveModel::Conversion
+> 来实现 to_model，active Model还需要3个方法to_key() , to_param() , and to_partial_path() 
 
-> to_key()方法返回一个数组，里面包含识别对象的唯一key，如果存在，就在views中被dom_id()方法使用，dom_id()方法被添加到rails和dom_class()一起，还有一组其他帮助方法，可以更好的组织我们的view,例如div_for(@post),@post是一个 Active Record,Post类实例，id是42，基于这些方法，创建一个div，然后id attribute等于 post_42,
+> to_key()方法返回一个数组，里面包含识别对象的唯一key，如果存在，就在views中被dom_id()方法使用，dom_id()方法被添加到rails和dom_class()一起，还有一组其他帮助方法，可以更好的组织我们的view,例如div_for(@post),@post是一个 Active Record,Post类实例，id是42，基于这些方法，创建一个div，然后div的id attribute等于 post_42,
 > class attribute 是post， 对于Active Record，to_key()返回一个数组包含记录ID
 
-> 另一方面，to_param用于路由，能够被被Model生成的url覆盖，当我们调用post_path(@post)时，rails调用
+> 另一方面，to_param用于路由，能够被任何Model覆盖，用于生成的唯一url，当我们调用post_path(@post)时，rails调用
 >@post对象中的to_param方法，使用它生成的结果作为最终url， 对于Active Record，默认返回ID作为字符串
+
+    例如点击show动作 url导航后面的users/id 我们可以使用这个方法修改id形式 例如 users/id-name
 
  >最后，我们有to_partial_path()方法，这个方法在每次我们传递一个记录或者一个记录集合给我们视图中render()在时调用， rails将会检查每条记录，得到他们的局部路径，例如 post类实例路径就是posts/post
 
@@ -250,14 +254,14 @@
         include ActiveModel::Conversion
         extend ActiveModel::Naming
 
-> 在使用ActiveModel::Naming扩展我们的类之后，它响应了一个叫做model_name()方法，返回一个ActiveModel::Name 实例， 类似字符串，提供了一些方法，例如，human(),singular(),和其他都是与名字相关改变词形方法，让我们添加一个测试到我们的测试套件里， 
+> 在使用ActiveModel::Naming扩展我们的类之后，它响应了一个叫做model_name()方法，返回一个ActiveModel::Name 实例， 类似字符串，提供的一些方法，例如，human(),singular(),和其他都是与名字相关改变词形方法，让我们添加一个测试到我们的测试套件里， 
 
     test "model_name exposes singular and human name" do
       assert_equal "sample_mail", @model.class.model_name.singular
       assert_equal "Sample mail", @model.class.model_name.human
     end
 
-> 这与Active Record的预览行为类似，仅有的不同是active Record支持 国际化，MailForm就没这么幸运，但是可以使用ActiveModel::Translation扩展MailFormatter::Base，让我们写一个测试
+> 这与Active Record的预览行为类似，仅有的不同是active Record支持 国际化，MailForm不支持，但是可以使用ActiveModel::Translation扩展MailFormatter::Base，让我们写一个测试
 
     mail_form/test/compliance_test.rb
     test "model_name.human uses I18n" do
@@ -270,7 +274,7 @@
       end
     end
 
-> 这个测试添加了一个翻译到i18n末端，包含了SampleMeail类的人类可读形式，我们需要包装代码
+> 这个测试添加了一个翻译到i18n末端，包含了SampleMeail类的可读形式，我们需要包装代码
 > 使用begin .. ensure,保证i18n最后重新加载， 移除我们添加的翻译，让我们更新MailForm::Base确保新测试通过
 
     mail_form/lib/mail_form/base.rb
@@ -285,7 +289,7 @@
     The model should respond to errors
     The model should respond to persisted?
 
-> 第一个失败信息和validations有关，Active Model没有告诉任何有关验证的宏命令(例如 validates_presence_of()), 但是他需要们定义一个方法叫做errors(), 返回一个hash,
+> 第一个失败信息和validations有关，Active Model没有告诉任何有关验证的宏命令(例如 validates_presence_of()), 但是他需要们定义一个方法叫做errors(), 这个方法返回一个hash,
 > hash中的每个值都是一个数组，我们可以修正这个报错信息，通过引入ActiveModel::Validations在我们的模型里
 
     mail_form/lib/mail_form/base.rb
@@ -303,7 +307,7 @@
 
     The model should respond to persisted?
 
-> 这次,rails没有帮助我们，幸运的是，可以很简单的实现persisted?()方法，我们的controller和views都是用这个persisted?()方法在不同的情况,例如，无论什么时候，我们调用
+> 这次,rails没有帮助我们，幸运的是，可以很简单的实现persisted?()方法，不同的情况下，我们的controller和views都是用这个persisted?()方法在,例如，无论什么时候，我们调用
 > form_for(@model),它都会检查model是否存在， 如果存在，就创建一个Put请求，如果不存在
 > 就创建一个Post请求， 对于url_for也是一样的操作，生成的url取决于你的model
 
@@ -317,7 +321,7 @@
      false
     end
 
-> 这次，运行，rake test后，所有测试通过了，这意味着我们的模型符合active model api
+> 这次，运行，rake test后，所有测试通过了，这意味着我们的模型兼容了active model api
 
 
 #### Delivering the Form
@@ -342,7 +346,7 @@
     end
 
 
-> 当我们运行新的测试，我们得到一个失败，因为deliver()方法根本没存在，因为我们的模型具有来自ActiveModel::Validations的正确性的概念， deliver()方法应该在valid?为真时，发送邮件
+> 当我们运行新的测试，我们失败了，因为deliver()方法根本没存在，因为我们的模型具有来自ActiveModel::Validations的正确性的概念， deliver()方法应该在valid?为真时，发送邮件
 
     mail_form/lib/mail_form/base.rb
     def deliver
@@ -366,7 +370,7 @@
         end
       end
 
-> contact()方法给@mail_form赋值，通过给定的Mai Form对象，然后条用headers方法，这个方法应该返回一个拥有邮件数据，并且使用:to,:form,:subject为key的hash, 这个方法，不应该在MailForm::Base中定义，而是在其子类中， 这是个简单的但是强大的api设计，允许一个开发者定制邮件提交方式，不需重定义或者使用猴子补丁，对于Notifier class来说.
+> contact()方法通过传递的Mail Form对象给@mail_form赋值，然后调用headers方法，这个方法应该返回一个拥有邮件数据，并且使用:to,:form,:subject为key的hash, 这个方法，不应该在MailForm::Base中定义，而是在其子类中， 这是个简单的但是强大的api设计，允许一个开发者定制邮件提交方式，不需重定义或者使用猴子补丁，对于Notifier class来说.
 
 > 我们的MailForm::Notifer也调用append_view_path()方法，添加lib/views在我们的插件目录，
 >作为一个新的搜索模板的地址，最后一步之前，我们运行测试套件加在我们的新类
@@ -418,7 +422,7 @@
 
 #### 2.2 Integration Tests with Capybara
 
-> 前面章节,我们使用rails测试工具确保一个pdf被发送到客户端，为了保证我们的项目工作作为一个联系表单，我们应该创建一个真实的表单，提交它到适当的后端，验证邮件是否发送成功，如果使用rails测试工具实际上比较难写，大多数时候，
+> 前面章节,我们使用rails测试工具确保一个pdf被发送到客户端，为了保证我们的项目可以像一个联系表单那样工作，我们应该创建一个真实的表单，提交它到适当的后端，验证邮件是否发送成功，如果使用rails测试工具实际上比较难写，大多数时候，
 > 我们最后直接编写一个request到后端，
 
     post "/contact_form", contact_form:
@@ -578,11 +582,11 @@
       validates_with PresenceValidator, _merge_attributes(attr_names)
     end
 
-> validates_with 方法负责吃书画，通过给定的ActiveModel::Validations::PresenceValidator类和　_merge_attributes()将属性转换成hash, 让你按照下面调用
+> validates_with 方法负责初始化，传递的ActiveModel::Validations::PresenceValidator类，　_merge_attributes()将传递的属性转换成hash, 可以让你按照下面调用
 
     validates_presence_of :name
 
-> 实际上你是这么做
+> 实际上等同于你是这么做
 
   　validates_with PresenceValid, attributes: [:name]
 
