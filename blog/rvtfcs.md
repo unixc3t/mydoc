@@ -1,20 +1,20 @@
 #### Retrieving View Templates from Custom Stores
 
-> 当rails 渲染一个template时，他需要从某个地方得到这个模板，默认情况，rails从文件系统得到模板，但是不受此限制， rails提供了回调，允许我们从任何我们想要的地方得到模板， 只要我们实现了需要的api,让我们探究一下构建机制，从数据库得到模板，模板可以被创建更新，删除，这些都通过web接口， 但是首先，我们要深入学习一下rails的渲染栈
+> 当rails 渲染一个template时，他需要从某个地方得到这个模板，默认情况，rails从文件系统得到模板，但是不受此限制， rails提供了钩子接口，允许我们从任何我们想要的地方得到模板， 只要我们实现了需要的api,让我们探究一下构建机制，从数据库得到模板，模板可以被创建更新，删除，这些都通过web接口， 但是首先，我们要深入学习一下rails的渲染栈
 
 ###### 3.1 Revisiting the Rendering Stack
 
-> 前面章节，我们看到rails控制器渲染栈主要职责是格式化选项，将他们发送给ActionView::Render,当被调用时候，render接收到一个ActionView::Base实例，通过view context，和一个hash参数，找到编译渲染制定模板
+> 前面章节，我们看到rails控制器渲染栈主要职责是格式化选项，将他们发送给ActionView::Render的一个实例,当被调用时候，render接收到一个ActionView::Base实例，叫做view context，和一个hash,里面是options，用来查找编译渲染指定的模板
 
     view_renderer.render(view_context, options)
 
 
-> 当我们渲染一个模板时，源码必须编译成可执行代码， 每次一些ruby代码被执行，都需要在给定的上下文中执行， 在一个rails程序中， 试图在视图上下文中执行， 所有帮助方法在我们模板中都可用，例如 form_for()和link_to(),只要定义这些方法的模块被包含在view context(试图上下文中)
+> 当我们渲染一个模板时，源码必须编译成可执行代码， 每次一些ruby代码被执行，都需要在给定的上下文中执行， 和在一个rails程序中， 视图在视图上下文对象中执行， 所有帮助方法在我们模板中都可用，例如 form_for()和link_to(),只要定义这些方法的模块被包含在view context(视图上下文中)
 
 
-> 除了view context，view render需要访问一个ActionView::LookupContext实例，通常这个实例被叫做lookup_context， 这个lookup context在controllers和views间分享，存储需要找到模板的所有信息，例如，没放一个json请求过来，这个请求格式存储在lookup_context对象里，告诉rails仅仅需要找用来渲染json数据的模板
+> 除了view context，view render需要访问一个ActionView::LookupContext实例，通常这个实例被叫做lookup_context， 这个lookup context在controllers和views间被共享，存储需要找到模板的所有信息，例如，当一个json请求过来，这个请求格式存储在lookup_context对象里，所以rails仅仅查找json格式模板
 
-> 这个lookup context也负责存储所有视图路径，一个视图路径(view path)是一个对象集合，根据条件找到模板，所有在rails 程序中的控制器都有个默认试图路径，对应文件系统的app/views路径， 给予一定条件，例如模板名字，位置，格式，这个视图可以找到app/views下的指定模板，例如当你有一个HTML请求UserController控制器的index action，默认的试图路径将会尝试读取在app/views/users/index.html.*这个模板，如果这个模板被找到后，然后编译渲染 如下图所示
+> 这个lookup context也负责存储所有视图路径，一个视图路径(view path)是一个对象集合，根据条件查找模板，所有在rails 程序中的控制器都有个默认试图路径，指向文件系统上的的app/views路径， 这些给定的条件，例如名称，位置，格式，在app/views下的查找指定模板，例如当你有一个HTML请求UserController控制器的index action，默认的试图路径将会尝试读取在app/views/users/index.html.*这个模板，如果这个模板被找到后，然后编译渲染 如下图所示
 
 ![](04.png)
 
@@ -29,7 +29,7 @@
 
 > 上面代码表示，如果在app/views目录下没有找到模板，就去lib/views目录下查找
 
->虽然我们设置路径是字符串形式，来表示文件系统路径，rails提供了一个定义良好的api 可以用任何对象作为路径， 这意味着我们不必要强制在文件系统上存储模板，我们可以存储模板在任何位置，根据我们提供的对象，找到模板，虽然外部的对象被称为视图的路径，在Rails内部称之为模板解析器，他们必须遵守解析器API。
+>虽然我们设置路径是字符串形式，来表示文件系统路径，rails提供了一个定义良好的api 可以用任何对象作为路径， 这意味着我们不必要强制在文件系统上存储模板，我们可以存储模板在任何位置，根据我们提供的对象，找到模板，虽然外表上这些对象被称为视图的路径，在Rails内部称之为模板解析器template resolvers，他们必须兼容解析器API。
 
 
 > rails提供了一个抽象的 解析器实现，叫做 ActionView::Resolver 
@@ -38,7 +38,7 @@
 
 #### 3.2 Setting Up a SqlResolver
 
-> 这次，开发一个模板管理系统，开发一个rail application代替使用rails plugin插件方式开发， 这个程序交错template,我们使用下面这行命令
+> 这次，开发一个模板管理系统，开发一个rail application代替使用rails plugin插件方式开发， 这个程序叫做template,我们使用下面这行命令
 
     $ rails new templater
 
@@ -57,12 +57,12 @@
 
     $ bundle exec rake db:migrate
 
->目前，没有什么奇怪的，下一步我们创建一个模板解析器，使用sqlTemplate模型，将模板从数据读取和展示，通过resolver api
+>目前，没有异常，下一步我们创建一个模板解析器，使用sqlTemplate模型，将模板从数据读取和展示，通过resolver api
 
 
 ###### The Resolver API
 
-> resolver api只由一个单独方法组成，叫做find_all(), 返回一组模板，下面是方法签名
+> resolver api只由一个单独方法组成，叫做find_all(), 返回模板数组，下面是方法签名
 
     def find_all(name, prefix, partial, details, cache_key, locals)
 
@@ -72,7 +72,7 @@
       locale: [:en, :en], handlers: [:erb, :builder, :rjs] }, nil, [])
 
 
-> 对于这个简单的请求，我们可以看到 name对应控制器里的action，prefix对应了控制器名字，partial是一个布尔值，告诉我们是否这个模板作为一个局部模板， details是一个hash，包含用于查找的额外信息， 例如，请求格式，国际化本地设置，然后就是模板解析器，最后两个参数就是cache_key和locals,这是个空数组，用于渲染时的本地变量
+> 对于这个简单的请求，我们可以看到 name对应控制器里的action，prefix对应了控制器名字，partial是一个布尔值，告诉我们这个模板是否作为一个局部模板被渲染， details是一个hash，包含用于查找的额外信息， 例如，请求格式，国际化本地设置，然后就是模板解析器，最后两个参数就是cache_key和locals,locals这是个空数组，用于渲染局部模板时使用
 
 > rails提供了一个抽象的解析实现，叫做ActionView::Resolver，我们使用这个作为我们的解析基础，部分源码如下，重点关注find_all和find_templates()方法
 
@@ -152,22 +152,22 @@
 
     ActionView::Template.new(source, identifier, handler, details)
 
-> source是模板主体被存储在数据库中，identifier是一个唯一的字符串代表模板，我们通过加入数据库template id确保唯一性
+> source是模板主体被存储在数据库中，identifier是一个代表模板的唯一字符串，我们通过加入template id到数据库确保它的唯一性
 
 > handler这个对象负责编译模板，handler不是字符串，而是一个对象，使用ActionView::Template的registered_template_handler()方法得到
 
     ActionView::Template.registered_template_handler("erb") =>#<ActionView::Template::Handlers::ERB:0x007fc722516490>
 
-> 最后一个给初始化模板的参数是一个hash有三个key，:format用来找到模板，：updated_at模板最后更新时间，和一个代表模板的:virtual_path
+> 最后一个初始化模板的参数是一个hash有三个key，:format用来找到模板，：updated_at模板最后更新时间，和一个代表模板的:virtual_path
 
-> 因为，模板不在需要一个文件系统，不再需要一个path路径，这打破了一些依赖依赖文件系统的rails特性，例如模板中的i18n缩写t(".messge")，它使用模板路径进行翻译，所以，无论何时，你在模板app/views/users/index里面，那么这几个简写形式将去找到"users.index.message"对应翻译
+> 因为，模板不在需要一个文件系统，不是必需要一个path路径，这打破了rails需要依赖文件系统的概念，例如模板中的i18n缩写t(".messge")，它使用模板路径进行查找翻译，所以，无论何时，你在模板app/views/users/index里面，那么这个简写形式将去找到"users.index.message"对应翻译
 
 
-> 为了解决这个需求，rails需要模板提供一个：virtual_path，你可以存储模板在任何位置，但是你需要提供一个:virtual_path，如果模板存储在文件系统可以作为路径存储位置，这就允许t("message")通过虚拟路径来实现预期
+> 为了解决这个需求，rails需要模板提供一个：virtual_path，你可以存储模板在任何位置，但是你需要提供一个:virtual_path，如果模板存储在文件系统可以作为路径存储位置，这就允许t("message")通过虚拟路径来实现
 
 > 编写测试，理解模板是如何初始化的，我们通过继承ActionView::Reslover来实现find_templates()
 
-> 在我们的解析器中，考虑给定细节的顺序是很重要的。换句话说，如果这个locale 数组包含[:es, :en],一个模板使用西班牙语言优先级高于英语，一个方案就是为每个细节生成一个顺序，将结果存储到数据库，另一个选项是排序返回的模板，然而，为了简单起见，替代传递所有locales并且格式化sql语句，
+> 在我们的解析器中，考虑details里内容的顺序是很重要的。换句话说，如果这个locale 数组包含[:es, :en],一个模板使用西班牙语言优先级高于英语，一个解决方案就是为每个detail生成一个顺序，将结果存储到数据库，另一个选项是排序返回的模板，然而，为了简单起见，替代传递所有locales并且格式化sql语句，我就会用数组的第一个来使用
 
     templater/1_resolver/app/models/sql_template.rb
       class SqlTemplate < ActiveRecord::Base
@@ -231,7 +231,7 @@
         end
       end
 
-> 我们实现了格式化给定的参数，查询数据库，从结果集创建模板对象，我们也添加了对我们model的验证，确保body和path值不为空，确保是一个有效的格式
+> 我们实现了格式化给定的参数，查询数据库，从结果集创建模板对象，我们也添加了对我们model的验证，确保body和path值不为空，确保是一个有效的格式,locale 和 handler也被支持
 
 > 由于添加了一些验证规则到我们的model里，一些测试会失败，因为我们的fixtures包含了无效的数据，为了使测试可以通过，我们修改fixture test/fixtures/sql_templates.yml，将数据修改为有效数据
 
@@ -264,7 +264,7 @@
           class UsersController < ApplicationController
           append_view_path SqlTemplate::Resolver.new
 
-> 当我们刷新在/users路径下刷新页面，我们看到整个页面再一次回来了，这次页面来自数据库， 虽然模板在数据库，整个布局文件让然来自文件系统，换句话说，一个请求过来，我们可以从不同的解析器得到模板
+> 当我们在/users路径下刷新页面，我们看到整个页面再一次回来了，这次页面来自数据库， 虽然模板在数据库，整个布局文件让然来自文件系统，换句话说，一个请求过来，我们可以从不同的解析器得到模板
 
 > 随时回到/sql_templates页面，操纵存储模板的主体，并且通知 UsersController里的index()将会做出相应改变，我们可以通过ActionView::Resolver的抽象能力添加一些代码做到这一点
 
@@ -313,8 +313,7 @@
 
 #### 3.3 Configuring Our Resolver for Production
 
-> 在生产环境中，为了确保模板可以快速的被找到，rails提供了一些方便的缓存，让我们了解一些缓存方式，以便让我们了解如何缓存模板，和当我们保存模板时让缓存过期,如前面说的
-> rails给我们提供了一个cache_key通过find_all()方法，我们的第一站是了解Rails为什么创建这个缓存键以及我们的解析器如何使用它。
+> 在生产环境中，为了确保模板可以快速的被找到，rails提供了一些方便的缓存，让我们了解一些缓存方式，以便让我们了解如何缓存模板，当我们保存模板时让缓存过期,如前面说的，rails给我们提供了一个cache_key通过find_all()方法，我们的第一站是了解Rails为什么创建这个缓存键以及我们的解析器如何使用它。
 
 
 ###### The Resolvers Cache
