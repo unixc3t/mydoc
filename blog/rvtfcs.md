@@ -318,26 +318,28 @@
 
 ###### The Resolvers Cache
 
-> 在前面我们看到ActionView::Resolve的find_all方法自动缓存模板，使用cached()方法。缓存是在初始化创建被实例变量@cached引用，解析器缓存模板时仅在Rails.application.config.cache_classes返回true时，此外clear_cache()方法用来清空缓存
+> 在前面我们看到ActionView::Resolve的find_all方法调用cached()方法自动缓存模板。缓存是在初始化创建被实例变量@cached引用，仅在Rails.application.config.cache_classes返回true时解析器缓存模板,此外clear_cache()方法用来清空缓存
 
-> 每个模板缓存在函数的5个值中(5个值代表了这个函数)， cache_key,prefix name partial,还有 locals, 给定这5个key，我们可以存储这个模板在缓存中以3种方式。
+> 每个模板缓存在函数的5个值中(5个值代表了这个函数)， cache_key,prefix name partial表示是否是一个局部模板,还有 set集合locals, 给定这5个key，我们可以存储这个模板在缓存中以3种方式。
 
 
     # Nested hash
     @cached[key][prefix][name][partial][locals]
+
     # Simple hash with array as key
     @cached[[key, prefix, name, partial, locals]]
+
     # Simple hash with hash as key
     @cached[key: key, prefix: prefix, name: name, partial: partial, locals: locals]
 
-> 所有三个缓存实现都给了我们想要的行为。然而，他们中不同的就是性能，我们需要了解ruby如何在hash中查找。来理解一点。
+> 所有三个缓存实现都给了我们想要的行为。然而，他们中不同的就是性能，我们需要了解ruby如何在hash中查找模板才能理解他们的不同。
 
 
 ##### Ruby Hash Lookup
 
-> 无论什么时候，我们存储一个值作为Hash对象的key，ruby要存储三样东西，给定的key,给定的值，key对应的hash值
+> 无论什么时候，我们存储一个值作为Hash对象的key，ruby要存储三样东西，给定的key,对应的值，key对应的hash值
 
->这个hash值是作为给定的key，在key上调用Object#ahsh()方法的结果，这有一个简单的方法证明是基于Object#hash()方法，我们打开一个irb sessin,然后输入下面
+>这个hash值是作为给定的key，在key上调用Object#ahsh()方法得到，这有一个简单的方法证明是基于Object#hash()方法，我们打开一个irb sessin,然后输入下面
 
   class NoHash
     undef_method :hash
@@ -351,8 +353,8 @@
 
 ![](06.png)
 
-> 当我们尝试在hash对象中，获取key对应的值的时候，例如hash[:b],ruby使用给定的key和Object#hash()方法计算他的值，然后查找时候有一项或多项在hash中只有一样的hash值
-> 例如，:b.hash返回231228,然后看到一项或多项都包含231228,ruby检查任意一个key时候等价于给定的key值，使用equality操作符 eql?() 因为:b.eql?(:b)返回true,所以我们例子中返回2
+> 当我们尝试在hash对象中，获取key对应的值的时候，例如hash[:b],ruby使用给定的key和Object#hash()方法计算key的hash值，然后查找时候有一项或多项在hash中只有一样的hash值
+> 例如，:b.hash返回231228,然后看到一项或多项都包含231228,ruby检查是否有一个key等价于给定的key值，使用equality操作符 eql?() 因为:b.eql?(:b)返回true,所以我们例子中返回2
 
 
 > 为了证明ruby使用Object#hash()本地化所有项，我们打开另一个irb 输入下面代码
@@ -370,12 +372,12 @@
 > 在我们修改了hash方法的返回值之后，我们就不能得到一样的值了。
 
 
-> ruby存储使用Object#hash方法存储key可以得到快速的查找， 比较hash值比比较对象快
+> ruby使用Object#hash方法存储key保证快速查找， 比hash值比较比对象比较快
 
-> 这种实现方式意味着找到一个值，性能损失在eql?方法上，也涉及object#hash方法上，记住
-> 我们可以实现我们的解析器缓存使用一个nested hash 或者一个简单的使用数组作为key的hash，或者使用hash作为key，我们应该选择第一个，因为在nested-hash例子中，这个hash的key是字符串或者布尔值，ruby知道如何计算Object#hash()值，另一方面，Object#hash的计算对于array和hash更废资源
+> 这种实现方式意味着查找一个值的时候，不仅要调用eql?方法，也要调用key的object#hash方法，记住
+> 我们可以使用一个nested hash 或者一个简单hash数组作为key实现我们的解析器缓存，或者一个hash的hash值作为key，我们应该选择第一个，因为在nested-hash例子中，这个hash的key是字符串或者布尔值，ruby知道如何计算Object#hash()值，另一方面，Object#hash的计算对于array和hash值更废资源
 
-> 我们在新的irb session中展示
+> 我们在irb session中示范
 
     require "benchmark"
 
@@ -402,13 +404,13 @@
 
 ###### The Cache Key
 
-> 我们已经知道，我们的解析器需要内建一个缓存，我们也知道我们的解析器使用nested hash存储模板，缓存依赖于五个值，@cached[key][prefix][name][partial][locals]> 然而，find_all签名需要6个参数
+> 我们已经知道，我们的解析器需要内建一个缓存，我们也知道我们的解析器使用nested hash存储模板，缓存依赖于五个值，@cached[key][prefix][name][partial][locals] 然而，find_all函数签名需要6个参数
 
     def find_all(name, prefix=nil, partial=false, details={}, key=nil, locals=[])
 
-> details是一个hash，包含了format,locale和其他信息用来查找模板，lookup context存储了这个信息，从文件系统中检索正确的模板是非常必要的。那么为什么缓存不使用这些细节呢？
+> details是一个hash，包含了format,locale和其他信息用来查找模板，lookup context存储了这个信息，从文件系统中检索正确的模板这些信息必不可少的。那么为什么缓存不使用这些details呢？
 
-> 还记得我们确定，当比较较简单结构时，使用Object#hash()计算hash是十分耗费资源
+> 还记得我们如何确定，当比较较简单结构时，使用Object#hash()计算hash是十分耗费资源
 >，比如字符串？如果我们使用details作为key，在缓存hash中，会非常慢，因为details是一个数组组成的hash
 
     details # => {
@@ -425,13 +427,15 @@
     # Generate an object for the details hash
     @details_key ||= {}
     key = @details_key[details] ||= Object.new
+
     # And send it to each resolver
     resolver.find_all(name, prefix, partial, details, key)
+
     # Inside the resolver, the details value is not used in the cache
     # Instead we use the key, which is a simple object and fast
     @cached[key][prefix][name][partial][locals]
 
-> 换句话说，details没有在cache中被直接使用，而是通过cache_key， 这一点很重要，
+> 换句话说，details没有在cache中被直接使用，而是用于生成缓存cache_key， 这一点很重要，
 > 因为在一个请求期间，details很少改变， format和locale通常在渲染模板前就被设置
 > 因为，不管多少模板被渲染，解析器都在一个请求中被调用，cache_key仅仅被计算一次，如果details改变，例如请求format， 一个新的cache_key就会生成
 
@@ -451,14 +455,14 @@
     Benchmark.realtime { 1000.times { hash_2[details] } } # => 0.003937
 
 
-> 慢20倍，相当大差距，对于需要高性能的程序
+> 慢20倍，相当大差距，对于需要高性能的程序来说
 
 ######　Expiring the Cache
 
-> 因为rails会自动操作解析器中的缓存，我们仅仅需要担心使用Resolver#clear_cache()方法让缓存过期，缓存被存储在解析器实例中，所以要使缓存过期，我们需要跟踪所有的SqlTemplate:Resolver实例，并且在更新数据库模板的时候调用实例的clear_cache()方法
+> 因为rails会自动操作解析器中的缓存，我们仅仅需要担心使用Resolver#clear_cache()方法让缓存过期，缓存被存储在解析器实例中，所以要使缓存过期，我们需要跟踪所有的SqlTemplate:Resolver实例，并且在更新数据库模板的时候调用每个实例的clear_cache()方法
 
 
->然而，创建各自单独的SqlTemplate::Resolver实例的意义是什么？因为缓存在实例中，创建各自的实例,将会创造各自的缓存，减少了缓存的有效性，因此，我们不想穿件多个解析器实例，我们仅仅想在整个application分享同一个实例。
+>然而，创建各自单独的SqlTemplate::Resolver实例的意义是什么？因为缓存在实例中，创建各自的实例,将会创造各自的缓存，减少了缓存的有效性，因此，我们不想创建多个解析器实例，我们仅仅想在整个application分享同一个实例。
 
 >我们需要一个单例类，幸运的是，ruby有一个Singleton模块在标准库中,已经做了所有困难的部分。引入整个模块在SqlTemplate::Resolver中，使得SqlTemplate::Resolver.new()方法变成私有，暴露了一个SqlTemplate::Resolver.instance()方法作为替代，整个方法总是返回同一个对象。
 
@@ -486,10 +490,13 @@
         cache_key = Object.new
         resolver = SqlTemplate::Resolver.instance
         details = { formats: [:html], locale: [:en], handlers: [:erb] }
+
         t = resolver.find_all('index', 'users', false, details, cache_key).first
         assert_match 'Listing users', t.source
+
         sql_template = sql_templates(:users_index)
         sql_template.update_attributes(body: 'New body for template')
+
         t = resolver.find_all('index', 'users', false, details, cache_key).first
         assert_equal 'New body for template', t.source
       end
@@ -505,7 +512,7 @@
       end
 
 > 现在，每次模板被创建或者更新,缓存都会过期，允许修改选择的模板并且重新编译，不幸的是，
-> 这个方案有一个严重的限制， 它只适用于单个实例部署。，例如，如果你底层包含多个服务器或者你使用Passenger 或 Unicorn有一个实例池，一个请求将会得到一个指定实例，仅有它自己的缓存被清理，换句话说，在机器之间，缓存不是同步的
+> 这个方案有一个严重的限制， 它只适用于单个实例部署。，例如，如果你架构底层包含多个服务器或者你使用Passenger 或 Unicorn有一个实例池，一个请求将会得到一个指定实例，仅有它自己的缓存被清理，换句话说，在机器之间，缓存不是同步的
 
 > 幸运的是我们可以解决这个问题:
 
@@ -513,12 +520,12 @@
 
 * 另一个选项是通知每个实例，每当缓存过期时，例如，一个队列，在这种模式下,after_save()将会加单的Push一个消息，给队列，然后发送一个通知告诉所有订阅实例
 
-* 我们也可以通过设置config.action_view.cache_template_loading为false在生产环境，前面我提到过，解析器缓存只有在config.cache_classes为true时才激活
+* 我们也可以在生产环境通过设置config.action_view.cache_template_loading为false解决这个问题，前面我提到过，解析器缓存只有在config.cache_classes为true时才激活
 
 
 #### 3.4 Serving Templates with Metal
 
-> 现在，我们能够创建和编辑模板从ui界面，用我们的自己的解析器提供解析， 我们准备好谈论下一话题， 让我们使用我们的模板工具作为一个简单的内容管理系统
+> 现在，我们能够从ui界面创建和编辑模板，用我们的自己的解析器提供解析， 我们准备好谈论下一话题， 让我们使用我们的模板工具作为一个简单的内容管理系统
 
 ###### Creating the CmsController
 
@@ -596,7 +603,7 @@
 > 如果我们能有一个更简单的控制器，只需要我们所需要的行为，那不是很好吗？
 
 > 我们已经讨论有关抽象控制器和它怎样提供基础结构在Action Mailer 和 Action Controller
-> 中被分享，然而AbstractController::Base不知道任何有关http,换句话说，ActionController::Base就是一个单独整体，中间难道没有其他么？
+> 中被分享，然而AbstractController::Base不知道任何有关http,换句话说，ActionController::Base就是整个包了么，中间难道没有其他么？
 
 > 的确有，叫做ActionController::Meta，ActionController::Metal继承AbstractController::Base，实现了最基本的使我们的控制器成为一个有效程序栈的处理http的功能，继承图如下
 
