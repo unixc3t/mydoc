@@ -1,6 +1,6 @@
 ### Sending Multipart Emails Using Template Handlers
 
-> 完成了我们的rails render stack之旅,让我们看一下rails如何编译渲染模板，目前,我们已经看到,一个控制器负责格式化渲染参数，并且发送他们给view render，根据这些选项,view render告诉lookup context到解析器中去寻找指定的模板,并且考虑lookup context存储的Locale和foramt.
+> 完成了我们的rails render stack之旅,让我们看一下rails如何编译渲染模板，目前,我们已经看到,一个控制器负责格式化渲染参数，并且发送他们给view render，根据这些选项,view render告诉lookup context到解析器中去寻找指定的模板,并且考虑到lookup context存储的Locale和format.
 
 > 我们由上一节write the code知晓,解析器返回ActionView::Template的实例，同时这些实例被初始化好,我们需要传递一个叫做handler的参数，每个扩展例如.erb或者.html都有自己的模板处理器(handler)
 
@@ -13,11 +13,11 @@
 
 > 为了知道一个模板处理器如何工作,我们构建一个模板处理器解决这个实际问题,即使今天的email基于是1970年创建的，html 4.0版本在1997年制定,我们仍然不能依赖html发送邮件给每个人，因为邮件客户端不能适当渲染这些属性。
 
-> 这就意味着无论什么时候配置一个程序发送html邮件，我们都应该发送一个同样内容的，文本格式的，创建一个多版本的邮件， 如果邮件接收者不能读取html邮件，它将回头接收文本形式邮件
+> 这就意味着无论什么时候配置一个程序发送html邮件，我们都应该发送一个同样内容的文本格式，创建一个多版本的邮件， 如果邮件接收者不能读取html邮件，它将转而接收文本形式邮件
 
 > Action Mailer创建多版本邮件很容易，但是这样的方案导致我们不得不管理两个版本邮件，而且内容一样,如果我们同样内容被渲染成html和普通文本格式不是更好？
 
-> markdown是一个轻量级的标记语言,由John Gruber和Aaron Swartz创造,目的是有利于简单的读写, markdown的语法完全由标点符号组成,允许你嵌入到html里，下面是一个简单的markdown文本
+> markdown是一个轻量级的标记语言,由John Gruber和Aaron Swartz创造,目的是有利于简单的读写, markdown的语法完全由标点符号组成,允许被嵌入到html里，下面是一个简单的markdown文本
 
     Welcome
     =======
@@ -38,7 +38,7 @@
 
 ![](09.png)
 
-> 我们的处理器将使用markdown的铁性生成text和htmls试图，仅仅使用一个模板， 这唯一的问题是
+> 我们的处理器将使用markdown的特性生成text和htmls视图，仅仅使用一个模板， 这唯一的问题是
 > markdown不能解释ruby代码，为了绕过这个，我们必须使用erb编译我们的模板， 然后使用markdown编译器传唤他们。
 
 > 本章最后我们将配置rails生成器使用新的模板处理器作为默认。
@@ -96,17 +96,18 @@
 
 
 > 当我们运行测试的时候，失败了，因为rails仍然无法识别.rb扩展模板，注册一个新的模板处理器，我们调用ActionView::Template.register_template_handler()，传递两个参数，模板扩展和处理器对象。
->处理器对象可以是任何只要可以响应call()方法和返回字符串， 我们可以使用lambda简单实现一个处理器
+>处理器对象可以是任何对象，只要可以响应call()方法和返回字符串， 我们可以使用lambda简单实现一个处理器
 
       handlers/1_first_handlers/lib/handlers.rb
       require "action_view/template"
-        ActionView::Template.register_template_handler :rb,
-          lambda { |template| template.source }
+
+      ActionView::Template.register_template_handler :rb,
+        lambda { |template| template.source }
 
       module Handlers
       end
   
-> 当我们运行这个测试时，我们刚刚写的测试现在通过了。我们的lambda表达式接收一个ActionView::Template实例作为桉树，因为我们的模板处理器返回一个String包含ruby代码，我们的模板使用ruby代码写的，我们仅仅需要返回template.source().
+> 当我们运行这个测试时，我们刚刚写的测试现在通过了。我们的lambda表达式接收一个ActionView::Template实例作为参数，因为我们的模板处理器返回一个包含ruby代码的String，我们的模板使用ruby代码写的，我们仅仅需要返回template.source().
 
 > ruby的symbols实现了一个to_proc方法并且:source.to_pro和lambda { |arg| arg.source }一样，所以我们可以将模板处理器写的更短
 
@@ -115,7 +116,7 @@
 
 ###### String Template Handler
 
-> 我们的.rb模板处理器十分简单，但是功能有限,rails views通常有和很多静态内容,使用ruby代码处理这些变得十分麻烦，我们来实现另一个模板处理器,更合适处理这些静态内容,但是仍然允许我们内嵌ruby代码,因为string在ruby中支持插值写法，我们的下一个模板将会基于ruby字符串，让我们添加一个模板到dummy app里，
+> 我们的.rb模板处理器十分简单，但是功能有限,rails views通常有很多静态内容,使用ruby代码处理这些变得十分麻烦，我们来实现另一个模板处理器,更合适处理这些静态内容,但是仍然允许我们内嵌ruby代码,因为string在ruby中支持插值写法，我们的下一个模板将会基于ruby字符串，让我们添加一个模板到dummy app里，
 
     handlers/test/dummy/app/views/handlers/string_handler.html.string
     Congratulations! You just created another #{@what}!
@@ -144,17 +145,18 @@
     ActionView::Template.register_template_handler :string,
     lambda { |template| "%Q{#{template.source}}" }
 
-> 运行这个测试，通过了，我们的模板处理器返回了一个使用ruby短写%Q{}创建的字符串，rails将它编译成一个方法，当方法被调用时,ruby解释器执行这个字符串，返回插入的值的结果
+> 运行这个测试，通过了，我们的模板处理器返回了一个使用ruby简写方法%Q{}创建的字符串，rails将它编译成一个方法，当方法被调用时,ruby解释器执行这个字符串，返回插入的值的结果
 
 > 模板的处理器对于简单例子工作很好,但是有两个缺点，加入“}”字符到模板会引起语法错误,除非字符被转义
->同时，代码块支持有限,因为需要被包装到整个插值语法里， 这意味这下面两个引起错误
+>同时，代码块支持有限,因为需要被包装进整个插值语法里， 这意味这下面两个例子是无效的
 
     This } causes a syntax error
+
     #{2.times do}
     This does not work as in ERB and is invalid
     #{end}
 
-> 是时候看一个更健壮的模板处理器了
+> 是时候构建一个更健壮的模板处理器了
 
 
 #### 4.2 Building a Template Handler with Markdown + ERB
@@ -216,12 +218,12 @@
     module Handlers
         module MERB
         def self.erb_handler
-        @@erb_handler ||= ActionView::Template.registered_template_handler(:erb)
+          @@erb_handler ||= ActionView::Template.registered_template_handler(:erb)
         end
         
         def self.call(template)
-        compiled_source = erb_handler.call(template)
-        "RDiscount.new(begin;#{compiled_source};end).to_html"
+          compiled_source = erb_handler.call(template)
+          "RDiscount.new(begin;#{compiled_source};end).to_html"
         end
       end
     end
@@ -238,6 +240,7 @@
     RDiscount.new(begin
       nil.this_method_does_not_exist!
     end).to_html
+
     RDiscount.new(begin;nil.this_method_does_not_exist!;end).to_html
 
 
@@ -249,7 +252,7 @@
 
 #### Multipart Emails
 
-> 我们将在 Action Mailer中使用多部分emails，来展示我们加入模板处理器的行为，让我们创建一个mailer在虚拟程序里，用于我们的测试使用
+> 我们将在 Action Mailer中使用多部分emails，来展示我们加入模板处理器的行为，让我们在虚拟程序里创建一个mailer，用于我们的测试使用
 
     handlers/2_final/test/dummy/app/mailers/notifier.rb
     class Notifier < ActionMailer::Base
@@ -309,16 +312,16 @@
 
 ###### Formats Lookup
 
-> 在writting the code那节，我们讨论了解析器扶着传递：format选项给模板，解析器按照下面查找方式决定使用哪种格式
+> 在writting the code那节，我们讨论了解析器负责传递：format选项给模板，解析器按照下面查找方式决定使用哪种格式
 
-1. 如果模板被找到自身有一个有效格式就使用, 模板位于文件系统中，格式被指定名字一部分，例如index.html.erb
+1. 如果模板被找到并且有一个有效格式就直接使用。 模板位于文件系统中，格式被指定名字一部分，例如index.html.erb
 
-2. 如果木本被找到，但是没有指定一个格式，解析器询问模板处理器时候有一个默认格式
+2. 如果模板被找到，但是没有指定一个格式，解析器询问模板处理器是否有一个默认格式
 
-3. 如果模板处理器没有首选格式，则解析器应该返回查找中使用的格式相同。
+3. 如果模板处理器没有首选默认格式，则解析器应该返回查找中使用的格式相同。
 
-> 因为我们的contact.merb模板没有指定一个格式，所有解析器尝试获取默认格式，从我们的Handlers::MERB模板处理器里，这个默认格式通过Handlers::MERB.default_format()方法得到
-> 但是因为我们的模板处理器不能影响default_format()方法，所以第二步查找也跳过，解析器最后的选项是返回查找中使用的格式,作为们正使用format.text和format.html方法，他们自动被设置成查找的格式text和html.
+> 因为我们的contact.merb模板没有指定一个格式，所以解析器尝试从我们的Handlers::MERB模板处理器里获取默认格式，这个默认格式通过Handlers::MERB.default_format()方法得到
+> 但是因为我们的模板处理器不能响应default_format()方法，所以第二步查找也跳过，解析器最后的选项是返回查找中使用的格式,作为们正使用format.text和format.html方法，他们自动被设置成查找的格式text和html.
 
 > 例如，如果我们定义Handler::MERB.default_foramt()并且实现它，返回:text或者:html，我们的测试将会失败，我们的解析器永远不会达到第三步，在第二步的时候就会返回一个指定的格式.
 
@@ -329,7 +332,7 @@
 
 > 使用我们手上的模板处理器，渲染多部分邮件，最后一个步骤是给插件创建一个生成器, 我们的生成器将会钩入rails的邮件生成器,配置它成成.merb替代erb模板。
 
-> rails生成器提供了回调入口,允许其他生成器扩展和定制生成的代码,快速的看一下邮件生成器源码
+> rails生成器提供了钩子入口,允许其他生成器扩展和定制生成的代码,快速的看一下邮件生成器源码
 
     rails/railties/lib/rails/generators/rails/mailer/mailer_generator.rb
     module Rails
@@ -351,14 +354,14 @@
       end
     end
 
-> 虽然我们不能覆盖整个生成器api，我们看到他主要行为是拷贝一个邮件模板到app/mailers
-> 实现方法在create_mailer_file()里，注意，这歌邮件生成器不会告诉任何关于模板引擎和测试框架，它仅仅提供了回调，这就允许了其他库，像haml和rspec会进入mailer 神撑起，定制生成过程。
+> 虽然我们不能了解整个生成器api，我们看到他主要行为是在create_mailer_file()方法里实现拷贝一个邮件模板到app/mailers,
+> 注意，这个邮件生成器不会告诉任何关于模板引擎和测试框架，它仅仅提供了钩子，这就允许了其他库，像haml和rspec会进入mailer生成器，定制生成过程。
 
 
 ###### A Generator’s Structure
 
 > 了解生成器是如何工作的,我们深入看一下Rails::Generators::MailerGenerator源码。
-> 这个生成器继承了Rails::Generators::NamedBase，所有的生成器继承它，并且期望一个参数叫做NAME，当生成器从命令行被调用的时候，我们可以验证参数和选项通过执行下面的命令
+> 这个生成器继承了Rails::Generators::NamedBase，所有的生成器都继承它，当生成器从命令行被调用的时候，期望一个参数叫做NAME被传进来，我们可以验证参数和选项通过执行下面的命令
 
     $ rails g mailer --help
     Usage:
@@ -384,14 +387,14 @@
       File.join("app/mailers", class_path, "#{file_name}.rb")
     end
 
-> rails生成器，按照这些公共方法定义的顺序调用，这种结构很有趣，因为可以和继承很好的集合,如果你想继承了mailer生成器做了一些扩展，你仅仅需要继承它，定义一些public 方法，跳过任务是一些未定义的方法，无论何时你的新的生成器被调用,他都会执行继承的方法，然后执行你定义的新的public 方法，如同控制器，您可以通过声明一个公开的方法来使用
+> rails生成器，按照这些公共方法定义的顺序调用，这种结构很有趣，因为可以和继承很好的结合使用,如果你想继承了mailer生成器做了一些扩展，你仅仅需要继承它，定义一些public 方法，跳过任务是一些未定义主要的方法，无论何时你的新的生成器被调用,他都会执行继承的方法，然后执行你定义的新的public 方法，如同控制器，您可以通过声明一个公开的方法来使用
 
 > create_mailer_file()方法会调用三个方法，template() , class_path()和file_name()，第一个方法是thor里的帮助方法，是生成器基础, 其他两个定义在Rails::Generators::NamedBase里
 
 > thor有一个模块叫做Thor::Actions，包含一些方法可以在生成任务中使用,他们其中一个就是前面讨论的template()方法， 允许接收两个参数:源文件和目标位置
 
 
-> template()方法从文件系统读取源文件,使用ERB执行内嵌的ruby代码,拷贝结果到给定的目标位置, 在Thor中所有的erb模板都会被执行，在生成器的上下文中,这就意味着在生成器中定义的实例变量可以在你的模板中使用, 如通在proteced/private方法里一样
+> template()方法从文件系统读取源文件,使用ERB执行里面内嵌的ruby代码,拷贝结果到给定的目标位置, 在Thor中所有的erb模板都会被执行，在生成器的上下文中,这就意味着在生成器中定义的实例变量可以在你的模板中使用, 如通在proteced/private方法里一样
 
 > 通过class_path和file_name方法返回的值，受到NAME参数值影响, 查看素有定义的方法和他们的返回值，让我们看named_base_test.rb文件源码
 
@@ -413,14 +416,14 @@
 > 这个测试断言，当admin/foo作为NAME参数值， 例如 rails g mailer admin/foo 
 > 我们可以访问这些方法，返回对应的值
 
-> 最后,mailer生成器提供两个回调,一个是模板引擎,另一个是测试框架, 这些回调变成选项，可以通过命令行传递， 生成器允许接收一组参数和选项如下所示
+> 最后,mailer生成器提供两个钩子,一个是模板引擎,另一个是测试框架, 这些钩子变成选项，可以通过命令行传递， 生成器允许接收一组参数和选项如下所示
 
     $ rails g mailer Notifier welcome contact --test-framework=rspec
 
   
 #### Generators’ Hooks
 
-> 我们已经知道了rails生成器提供回调，然而当我们要求ERB作为模板引擎使用的时候, 邮件生成器是什么知道它并且找到它并使用的呢？ 生成器的回调工作感谢约定配置，当你选择模板引擎叫做:erb时，Rails::Generators::MailerGenerator会尝试读取下面三种生成器的一个
+> 我们已经知道了rails生成器提供钩子，然而当我们要求ERB作为模板引擎使用的时候, 邮件生成器是什么知道它并且找到它并使用的呢？ 生成器的回调工作感谢约定配置，当你选择模板引擎叫做:erb时，Rails::Generators::MailerGenerator会尝试读取下面三种生成器的一个
 
       • Rails::Generators::ErbGenerator
       • Erb::Generators::MailerGenerator
@@ -439,7 +442,7 @@
 
 ###### Template-Engine Hooks
 
-> rails为template engines暴露了三个回调，一个用于控制器，一个是用于mailer，一个是用于脚手架生成器,前两个生成文件只有一些actions通过命令行支持,例如rails g mailer Notifier welcome contact 或 rails g controller Info about contact，对于给定的每个action，模板引擎都会为它创建一个模板
+> rails为template engines暴露了三个钩子，一个用于控制器，一个是用于mailer，一个是用于脚手架生成器,前两个生成文件只有一些actions通过命令行支持,例如rails g mailer Notifier welcome contact 或 rails g controller Info about contact，对于给定的每个action，模板引擎都会为它创建一个模板
 
 
 > 换句话说,scaffold回调创建所有试图 index , edit , show , new , 和 the _form partial.
@@ -474,13 +477,15 @@
         class Base < Rails::Generators::NamedBase
           protected
           def format
-          :html
+            :html
           end
+
           def handler
-          :erb
+            :erb
           end
+
           def filename_with_extensions(name)
-          [name, format, handler].compact.join(".")
+            [name, format, handler].compact.join(".")
           end
         end
       end
@@ -539,10 +544,10 @@
           source_root File.expand_path("../templates", __FILE__)
           protected
           def format
-          nil # Our templates have no format
+            nil # Our templates have no format
           end
           def handler
-          :merb
+            :merb
           end
         end
       end
@@ -573,7 +578,7 @@
 
     config.generators.mailer template_engine: :merb
 
-> 然而你或许不想添加这行代码到所有需要的程序里，如果我们在插件里设置为默认值，而不在application里不是更好？ rails允许我们这样做，使用rails::Railtie
+> 然而你或许不想到所有需要的程序里都添加这行代码，如果我们在插件里设置为默认值，而不在application里不是更好？ rails允许我们这样做，使用rails::Railtie
 
 #### 4.4 Extending Rails with Railties
 
@@ -582,6 +587,7 @@
 > 如果下面有一条你需要，你就应该引入railtie在你的插件里
 
 * 你的插件需要执行给定的任务，在rails初始化时或者在初始化后
+
 * 你的插件需要修改配置值，例如设置生成器
 
 * 你的插件提供了rake任务和生成器，没有在默认位置(默认位置是Lib/tasks，lib/generators，lib/rails/generators)
@@ -594,33 +600,39 @@
 
     rails/activerecord/lib/active_record/railtie.rb
     module ActiveRecord
-    class Railtie < Rails::Railtie
-    config.active_record = ActiveSupport::OrderedOptions.new
-    config.app_generators.orm :active_record, migration: true,
-    timestamps: true
-    config.app_middleware.insert_after "::ActionDispatch::Callbacks",
-    "ActiveRecord::QueryCache"
-    config.eager_load_namespaces << ActiveRecord
-    rake_tasks do
-    require "active_record/base"
-    load "active_record/railties/databases.rake"
-    end
-    runner do
-    require "active_record/base"
-    end
-    initializer "active_record.initialize_timezone" do
-    ActiveSupport.on_load(:active_record) do
-    self.time_zone_aware_attributes = true
-    self.default_timezone = :utc
-    end
-    end
-    initializer "active_record.migration_error" do
-    if config.active_record.delete(:migration_error) == :page_load
-    config.app_middleware.insert_after "::ActionDispatch::Callbacks",
-    "ActiveRecord::Migration::CheckPending"
-    end
-    end
-    end
+      class Railtie < Rails::Railtie
+          config.active_record = ActiveSupport::OrderedOptions.new
+          config.app_generators.orm :active_record, migration: true,
+            timestamps: true
+            config.app_middleware.insert_after "::ActionDispatch::Callbacks",
+            "ActiveRecord::QueryCache"
+
+          config.eager_load_namespaces << ActiveRecord
+
+          rake_tasks do
+            require "active_record/base"
+            load "active_record/railties/databases.rake"
+          end
+
+          runner do
+            require "active_record/base"
+          end
+
+          initializer "active_record.initialize_timezone" do
+            ActiveSupport.on_load(:active_record) do
+            self.time_zone_aware_attributes = true
+            self.default_timezone = :utc
+          end
+
+        end
+
+        initializer "active_record.migration_error" do
+          if config.active_record.delete(:migration_error) == :page_load
+            config.app_middleware.insert_after "::ActionDispatch::Callbacks",
+            "ActiveRecord::Migration::CheckPending"
+          end
+        end
+      end
     end
 
 > 看完例子后，我们准备创建我们自己的railtie,配置mail生成器使用我们新的模板处理器作为默认
@@ -650,36 +662,42 @@
 
 #### 4.5 Wrapping Up
 
-> 在这章，我们反证了rails渲染栈的讨论，通过构建一个模板处理器，我们主要的模板处理器处理.merb扩展名的模板，使用erb混入了markdown语法，允许渲染html和普通文本，仅适用一个模板
+> 在这章，我们反证了rails渲染栈的讨论，通过构建一个模板处理器，我们主模板处理器处理.merb扩展名的模板，使用erb混入了markdown语法，允许渲染html和普通文本，仅适用一个模板
 
 >在这章的末尾，我们创建了一个生成器，修改rails使用我们新的模板处理器，也讨论了生成器api，相关的一些方法，Thor::Actions定义的copy_file() , inject_into_file() , create_file() , run()
 >此外，rails有一个模块叫做Rails::Generators::Actions。提供了一些方法适用于rails，例如gem(),environment()，route(),和许多其他的，rails也提供了一个测试生成器工具，叫做ails::Generators::TestCase ,当我们测试我们的生成器是很有用，下面有一些例子，rails使用Rails：：Generators::TestCase来测试他自己的mailer generator:
 
     rails/railties/test/generators/mailer_generator_test.rb
+
     require "generators/generators_test_helper"
     require "rails/generators/mailer/mailer_generator"
+
     class MailerGeneratorTest < Rails::Generators::TestCase
-    arguments %w(notifier foo bar)
-    def test_mailer_skeleton_is_created
-    run_generator
-    assert_file "app/mailers/notifier.rb" do |mailer|
-    assert_match(/class Notifier < ActionMailer::Base/, mailer)
-    assert_match(/default from: "from@example.com"/, mailer)
-    end
-    end
-    def test_mailer_with_i18n_helper
-    run_generator
-    assert_file "app/mailers/notifier.rb" do |mailer|
-    assert_match(/en\.notifier\.foo\.subject/, mailer)
-    assert_match(/en\.notifier\.bar\.subject/, mailer)
-    end
-    end
-    def test_invokes_default_test_framework
-    run_generator
-    assert_file "test/mailers/notifier_test.rb" do |test|
-    assert_match(/class NotifierTest < ActionMailer::TestCase/, test)
-    assert_match(/test "foo"/, test)
-    assert_match(/test "bar"/, test)
-    end
-    end
+      arguments %w(notifier foo bar)
+
+      def test_mailer_skeleton_is_created
+        run_generator
+          assert_file "app/mailers/notifier.rb" do |mailer|
+          assert_match(/class Notifier < ActionMailer::Base/, mailer)
+          assert_match(/default from: "from@example.com"/, mailer)
+        end
+
+      end
+
+      def test_mailer_with_i18n_helper
+        run_generator
+          assert_file "app/mailers/notifier.rb" do |mailer|
+          assert_match(/en\.notifier\.foo\.subject/, mailer)
+          assert_match(/en\.notifier\.bar\.subject/, mailer)
+        end
+      end
+
+      def test_invokes_default_test_framework
+        run_generator
+          assert_file "test/mailers/notifier_test.rb" do |test|
+          assert_match(/class NotifierTest < ActionMailer::TestCase/, test)
+          assert_match(/test "foo"/, test)
+          assert_match(/test "bar"/, test)
+        end
+     end
     end
