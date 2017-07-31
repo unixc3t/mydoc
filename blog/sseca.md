@@ -3,19 +3,19 @@
 > 前面章节，我们已经分析了rails render stack的里里外外，你已经了解到当一个请求到达控制器,控制器
 > 收集请求信息给需要渲染的模板， 模板从解析器中得到，然后编译渲染，嵌入到布局文件中, 最后，你得到了ruby字符串形式的模板，这个字符串设置到http response中，返回给客户端
 
-> 这种工作方式对大多数程序都不错。然而，有一些情况,我们需要发送我们的response以较小的字节片，有时这些较小的字节片，可能是无限的，我们需要一直需要发送，直到服务端和客户端链接中断为止。
+> 这种工作方式对大多数程序都还不错。然而，有一些情况,我们需要发送response以较小的字节片段方式，有时这些字节片段，可能是无限的不间断的，我们需要一直需要发送，直到服务端和客户端链接中断为止。
 
 
-> 无论什么时候我们发送一个response以字节片方式，我们都叫服务端数据流到客户端，因为rails以更传统的请求响应场景构建，流服务被添加并且不断被改良，这章我们来探究一下
+> 无论什么时候我们发送一个response以字节片段方式，我们都叫做服务端数据流到客户端，因为rails以更传统的请求响应场景构建，流服务的支持被添加并且不断被改良，这章我们来探究一下
 
-> 为了探究streaming是如何工作的，我们编写一个rails plugin，当我们的css样式改变时，发送数据给浏览器端，浏览器将会使用这些信息重新加载当前页面的样式， 允许开发者看到当他们修改页面时，页面同时改变，不需要手动刷新页面。
+> 为了探究streaming是如何工作的，我们编写一个rails plugin，当我们的css样式改变时，发送数据给浏览器端，浏览器将会使用这些信息重新加载当前页面的样式， 允许开发者看到当他们修改页面资源样式时，页面同时改变，不需要手动刷新页面。
 
 > 因为这个插件有自己的控制器，asserts，routes和其他，我们将基于rails engines提供的强大能力，添加功能作为rails application一部分，另一方面打包成gem分享到其他项目
 
 
 ###### 5.1 Extending Rails with Engines
 
-> rails 引擎允许我们的插件有自己的控制器，模型，帮助方法，试图，资源，和路由，就像一个符合规则的rails application.让我们生成一个插件叫做live_assets,使用rails 插件生成器，但是这次 我们传递--full 标记，用于生成model 控制器和路由目录
+> rails 引擎允许我们的插件有自己的控制器，模型，帮助方法，试图，资源，和路由，就像一个符合规则的rails application.让我们生成一个叫做live_assets的插件,使用rails 插件生成器，但是这次 我们传递--full 标记，用于生成model 控制器和路由目录
 
     $ rails plugin new live_assets --full
 
@@ -40,15 +40,16 @@
 
     live_assets/lib/live_assets.rb
     require "live_assets/engine"
+    
     module LiveAssets
     end
 
-> 创建一个Rails::Engine十分类似创建一个Rails::Railtie.因为Rails::Engine相比较Rails::Railtie只不过多了一些默认初始化设置，和paths程序接口 我们下节看到
+> 创建一个Rails::Engine十分类似创建一个Rails::Railtie.因为Rails::Engine相比较Rails::Railtie只不过多了一些默认初始化设置，和paths程序接口 我们接下来看看
 
 
 ###### Paths
 
-> 一个Rails::Engine没有硬编码路径，这意味着我们不需要放置我们的models和controllers在app/目录下，我们可以把他们放到任何位置。例如。我们配置我们的engine读取我们的控制器从lib/controllers目录，替代app/controllers，如下
+> 一个Rails::Engine没有硬编码路径，这意味着我们不需要将我们的models和controllers放在app/目录下，我们可以把他们放到任何位置。例如。我们配置我们的engine读取我们的控制器从lib/controllers目录，替代app/controllers，如下
 
       module LiveAssets
         class Engine < Rails::Engine
@@ -56,7 +57,7 @@
         end
       end
 
-> 我们也可以让rails读取我们的controllers从app/controllers和lib/controllers两个目录里
+> 我们也可以让rails读取我们的controllers从app/controllers和lib/controllers两个目录里读取
 
     module LiveAssets
       class Engine < Rails::Engine
@@ -64,9 +65,9 @@
       end
     end
 
->这些路径有一样的语义在rails application里，如果你有一个控制器叫做LiveAssetsController在app/controllers/live_assets_controller.rb里，或者在lib/controllers/live_assets_controller.rb里，这个控制器都会被自动加载，当你需要这个控制器的时候， 不如要显示的required
+>这些路径和在rails application里的路径有一样的语义，如果你有一个控制器叫做LiveAssetsController在app/controllers/live_assets_controller.rb里，或者在lib/controllers/live_assets_controller.rb里，这个控制器都会被自动加载，当你需要这个控制器的时候， 不如要显示的required
 
-> 现在，我们遵守传统路径,粘贴我们的控制器到app/controllers,所以不应用前面的改变，通过查看rails源码，我们可以检查所有自定义路径
+> 现在，我们遵守约定的路径,粘贴我们的控制器到app/controllers,所以不需要使用前面的修改路径方法，通过查看rails源码，我们可以检查所有自定义路径
 
 ![](11.png)
 
@@ -101,18 +102,18 @@
 
 #### 5.2 Live Streaming
 
-> 看一下streaming如何工作，让我们创建一个控制器叫做LiveAssetsController,文件位置app/controllers/live_assets_controller.rb，引入了ActionController::Live功能，发送hello world间断。
+> 看一下streaming如何工作，让我们创建一个控制器叫做LiveAssetsController,文件位置app/controllers/live_assets_controller.rb，引入了ActionController::Live功能，发送hello world不间断。
 
     live_assets/1_live/app/controllers/live_assets_controller.rb
     class LiveAssetsController < ActionController::Base
       include ActionController::Live
       def hello
-      while true
-      response.stream.write "Hello World\n"
-      sleep 1
-      end
+        while true
+          response.stream.write "Hello World\n"
+          sleep 1
+        end
       rescue IOError
-      response.stream.close
+        response.stream.close
       end
     end
 
@@ -163,13 +164,13 @@
 
 ###### Server-Sent Events
 
-> 开发者总是需要在浏览器里收到服务端的更新，很长一段时间里，轮询是最通用的解决这个问题的技术。在轮询的时候，浏览器频繁发送请求到服务器端，询问是否有新数据,如果没有新数据，服务端返回一个空响应，浏览器再开始新的请求,根据频率，浏览器最终向服务器发送许多请求，产生大量开销。
+> 开发者总是需要在浏览器里收到服务端的更新，很长一段时间里，轮询是最通用的解决这个问题的技术方案。在轮询的时候，浏览器频繁发送请求到服务器端，询问是否有新数据,如果没有新数据，服务端返回一个空响应，浏览器再开始新的请求,根据频率，浏览器最终向服务器发送许多请求，产生大量开销。
 
->不断发展,长轮询技术出现,使用这个技术,浏览器定期的发送请求给服务端,如果没有更新服务器端在发送空响应之前，等待一段时间，虽然比传统的轮询执行的好一些，浏览器之间存在交叉兼容性问题。
+>随着不断发展,长轮询技术出现,使用这个技术,浏览器定期的发送请求给服务端,如果没有更新服务器端在发送空响应之前，等待一段时间，虽然比传统的轮询执行的好一些，浏览器之间存在交叉兼容性问题。
 > 此外,许多代理和服务端如果一段时间没有通讯就会发生链接丢失，这种方法就失效了
 
 
-> 为了解决开发者的需求，html标准引入了两个api， Server Sent Events (SSE) 和 WebSockets，WebSockets允许客户端和服务器端交换信息在同一个连接上，但是因为是新协议，或许需要改变你的开发栈来支持他,两一个，Server sent Event，是一个单向通讯通道。从服务端到客户端,可以使用任何web服务器，只要能够支持流响应(stream response),基于这些原因sse使我们这章节选择的方案。
+> 为了解决开发者的需求，html标准引入了两个api， Server Sent Events (SSE) 和 WebSockets，WebSockets允许客户端和服务器端交换信息在同一个连接上，但是因为是新协议，或许需要改变你的开发栈来支持，Server sent Event，是一个单向通讯通道。从服务端到客户端,可以使用任何web服务器，只要能够支持流响应(stream response),基于这些原因sse使我们这章节选择的方案。
 
 > sse基础就是event stream format，下面是一个对http请求的事件流响应
 
@@ -183,54 +184,57 @@
     event: other_channel
     data: {"another":"message"}
 
-> 数据的界定通过两个新行，每个信息有一个event和他关联的数据，在这个例子中, 数据时json，但它也可以是文本，当流推送的时候，我们需要从服务端返回一个格式, 让我们创建一个新的action叫做sse在我们的LiveAssetsController里，发送一个reloadcss事件，每秒钟发送一次
+> 数据的界定通过两个新行，每个信息有一个event和他关联的数据，在这个例子中, 数据是json格式，但它也可以是文本，当流推送的时候，我们需要从服务端返回一个格式, 让我们创建一个新的action叫做sse在我们的LiveAssetsController里，发送一个reloadcss事件，每秒钟发送一次
 
     live_assets/1_live/app/controllers/live_assets_controller.rb
     def sse
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Content-Type"] = "text/event-stream"
-    while true
-    response.stream.write "event: reloadCSS\ndata: {}\n\n"
-    sleep 1
-    end
-    rescue IOError
-    response.stream.close
+      response.headers["Cache-Control"] = "no-cache"
+      response.headers["Content-Type"] = "text/event-stream"
+      while true
+        response.stream.write "event: reloadCSS\ndata: {}\n\n"
+        sleep 1
+      end
+    
+      rescue IOError
+      response.stream.close
     end
 
 > 类似我们第一个action,除了现在我们需要设置适当的响应内容类型，并且关闭缓存，服务端已经准备好。我们来写客户端，使用js:
 
     live_assets/1_live/app/assets/javascripts/live_assets/application.js
-    window.onload = function() {
-    // 1. Connect to our event-stream
-    var source = new EventSource('/live_assets/sse');
-    // 2. This callback will be triggered on every reloadCSS event
-    source.addEventListener('reloadCSS', function(e) {
-    // 3. Load all CSS entries
-    var sheets = document.querySelectorAll("[rel=stylesheet]");
-    var forEach = Array.prototype.forEach;
-    // 4. For each entry, clone it, add it to the
-    //
-    document and remove the original after
-    forEach.call(sheets, function(sheet){
-    var clone = sheet.cloneNode();
-    clone.addEventListener('load', function() {
-    sheet.parentNode.removeChild(sheet);
-    });
-    document.head.appendChild(clone);
-    });
+      window.onload = function() {
+
+        // 1. Connect to our event-stream
+        var source = new EventSource('/live_assets/sse');
+        // 2. This callback will be triggered on every reloadCSS event
+        source.addEventListener('reloadCSS', function(e) {
+        // 3. Load all CSS entries
+        var sheets = document.querySelectorAll("[rel=stylesheet]");
+        var forEach = Array.prototype.forEach;
+        // 4. For each entry, clone it, add it to the
+        //document and remove the original after
+
+        forEach.call(sheets, function(sheet){
+            var clone = sheet.cloneNode();
+            clone.addEventListener('load', function() {
+            sheet.parentNode.removeChild(sheet);
+        });
+
+       document.head.appendChild(clone);
+      });
     });
     };
 
 
-> 我们的javascript文件链接我们的后端，每个监听reloadcss事件,在页面重新加载所有的样式，我们的资源文件定义在,app/assets/live_assets/application.js，这个结构是需要的，因为rails仅仅预编译资源文件匹配application.*。因为他们是仅有的被预编译的文件，这样的文件通常被引入所有存在的文件里， 那就是为什么叫做manifests.
+> 我们的javascript文件链接我们的后端，监听每个reloadcss事件,在页面重新加载所有的样式，我们的资源文件定义在,app/assets/live_assets/application.js，这个文件被引入，因为rails仅仅预编译资源文件匹配application.*。因为他们是仅有的被预编译的文件，这样的文件通常被引入所有存在的文件里， 那就是为什么叫做manifests.
 
 > 最后我们创建一个帮助方法，让application读取我们资源更方便
 
     live_assets/1_live/app/helpers/live_assets_helper.rb
     module LiveAssetsHelper
-    def live_assets
-    javascript_include_tag "live_assets/application"
-    end
+      def live_assets
+        javascript_include_tag "live_assets/application"
+      end
     end
 
 > 使用我们的server sent events机制，我们到test/dummy创建一个控制器
@@ -291,7 +295,7 @@
 
 > 我们想监视这些目录上的文件的改变，一种选择是每秒或更少地手动检查每个目录中每个文件的修改时间。这就是文件系统轮询，轮询或许是个好的开始点，但是资源文件不断增长，会变得非常耗费CPU
 
-> 幸运的是，大多数系统提供一个通知机制，为文件系统改变,我们简单传递操作系统所有我们想监视的目录，并且如果一个文件被添加，移除，修改，我们的代码将会被通知,这个listen gem提供了所有主流系统通知机制的api调用，考虑我们的需求有一个实体监视文件系统，我们的请求可以订阅，让我们在一个线程里包装所有监听功能,在请求旁并发运行，打开lib/live_assets.rb实现它
+> 幸运的是，大多数系统提供一个通知机制，为文件系统改变,我们简单传递操作系统所有我们想监视的目录，并且如果一个文件被添加，移除，修改，我们的代码将会被通知,这个listen gem提供了所有主流系统通知机制的api调用，考虑我们的需求有一个实体监视文件系统，我们的请求可以订阅，让我们在一个线程里包装所有监听功能,在请求时并发运行，打开lib/live_assets.rb实现它
 
     live_assets//lib/live_assets.rb
       require "live_assets/engine"
