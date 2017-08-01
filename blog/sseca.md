@@ -306,24 +306,24 @@
         mattr_reader :subscribers
         @@subscribers = []
         
-      # Subscribe to all published events.
-      def self.subscribe(subscriber)
-      subscribers << subscriber
-      end
-      # Unsubscribe an existing subscriber.
-      def self.unsubscribe(subscriber)
-      subscribers.delete(subscriber)
-      end
-      # Start a listener for the following directories.
-      # Every time a change happens, publish the given
-      # event to all subscribers available.
-      def self.start_listener(event, directories)
-      Thread.new do
-      Listen.to(*directories, latency: 0.5) do |_modified, _added, _removed|
-      subscribers.each { |s| s << event }
-      end
-      end
-      end
+        # Subscribe to all published events.
+        def self.subscribe(subscriber)
+          subscribers << subscriber
+        end
+        # Unsubscribe an existing subscriber.
+        def self.unsubscribe(subscriber)
+          subscribers.delete(subscriber)
+        end
+        # Start a listener for the following directories.
+        # Every time a change happens, publish the given
+        # event to all subscribers available.
+        def self.start_listener(event, directories)
+          Thread.new do
+            Listen.to(*directories, latency: 0.5) do |_modified, _added, _removed|
+              subscribers.each { |s| s << event }
+            end
+          end
+        end
       end
 
 > 我们的代码原理是在一个线程里监听, 监听一组给定的目录，每次发生改变，推送注册的事件给每个订阅者， 因为我们使用listen gem,让我们添加到gemspec,
@@ -337,31 +337,31 @@
     require "test_helper"
     require "fileutils"
     class LiveAssetsTest < ActiveSupport::TestCase
-    setup do
-    FileUtils.mkdir_p "test/tmp"
-    end
-    teardown do
-    FileUtils.rm_rf "test/tmp"
-    end
-    test "can subscribe to listener events" do
-    # Create a listener
-    l = LiveAssets.start_listener(:reload, ["test/tmp"])
-    # Our subscriber is a simple array
-    subscriber = []
-    LiveAssets.subscribe(subscriber)
-    begin
-    while subscriber.empty?
-    # Trigger changes in a file until we get an event
-    File.write("test/tmp/sample", SecureRandom.hex(20))
-    end
-    # Assert we got the event
-    assert_includes subscriber, :reload
-    ensure
-    # Clean up
-    LiveAssets.unsubscribe(subscriber)
-    l.kill
-    end
-    end
+      setup do
+        FileUtils.mkdir_p "test/tmp"
+      end
+      teardown do
+        FileUtils.rm_rf "test/tmp"
+      end
+      test "can subscribe to listener events" do
+        # Create a listener
+        l = LiveAssets.start_listener(:reload, ["test/tmp"])
+        # Our subscriber is a simple array
+        subscriber = []
+        LiveAssets.subscribe(subscriber)
+        begin
+          while subscriber.empty?
+            # Trigger changes in a file until we get an event
+            File.write("test/tmp/sample", SecureRandom.hex(20))
+          end
+          # Assert we got the event
+          assert_includes subscriber, :reload
+        ensure
+          # Clean up
+            LiveAssets.unsubscribe(subscriber)
+            l.kill
+        end
+      end
     end
 
 
@@ -371,15 +371,15 @@
 
     live_assets/2_listener/test/live_assets_test.rb
     test "can subscribe to existing reloadCSS events" do
-      subscriber = []
-      LiveAssets.subscribe(subscriber)
+        subscriber = []
+        LiveAssets.subscribe(subscriber)
       begin
-      while subscriber.empty?
-      FileUtils.touch("test/dummy/app/assets/stylesheets/application.css")
-      end
-      assert_includes subscriber, :reloadCSS
+        while subscriber.empty?
+         FileUtils.touch("test/dummy/app/assets/stylesheets/application.css")
+        end
+          assert_includes subscriber, :reloadCSS
       ensure
-      LiveAssets.unsubscribe(subscriber)
+          LiveAssets.unsubscribe(subscriber)
       end
     end
 
@@ -387,17 +387,19 @@
 
     live_assets/2_listener/lib/live_assets/engine.rb
     module LiveAssets
-    class Engine < ::Rails::Engine
-    initializer "live_assets.start_listener" do |app|
-    paths = app.paths["app/assets"].existent +
-    app.paths["lib/assets"].existent +
-    app.paths["vendor/assets"].existent
-    paths = paths.select { |p| p =~ /stylesheets/ }
-    if app.config.assets.compile
-    LiveAssets.start_listener :reloadCSS, paths
-    end
-    end
-    end
+      class Engine < ::Rails::Engine
+        initializer "live_assets.start_listener" do |app|
+          paths = app.paths["app/assets"].existent +
+                  app.paths["lib/assets"].existent +
+                  app.paths["vendor/assets"].existent
+
+          paths = paths.select { |p| p =~ /stylesheets/ }
+
+          if app.config.assets.compile
+            LiveAssets.start_listener :reloadCSS, paths
+          end
+        end
+      end
     end
 
 > 注意我们开始监听只有在资源被动态编译时。这样防止在生产版本中也监听，在生产版本资源编译配置和与编译配置，通常设置为false。
@@ -406,33 +408,33 @@
 
 ![](13.png)
 
-> 图中最棘手的部分就是等待： 我们想每个请求都是空闲状态，知道一个事件到达，在循环中检查新事件，和我们在测试中做的一样，这不是一个好的选择，因为会导致CPU使用率过高，我们通过休眠一定的时间来解决这个问题，例如半秒，然后检查事件，但是这样也效果一般，最完美的效果是，我们想让让他睡眠，当事件到达时自动醒来。
+> 图中最棘手的部分就是等待： 我们想每个请求都是空闲状态，直到一个事件到达，在循环中检查新事件，和我们在测试中做的一样，这不是一个好的选择，因为会导致CPU使用率过高，我们通过休眠一定的时间来解决这个问题，例如半秒，然后检查事件，但是这样也效果一般，最完美的效果是，我们想让让他睡眠，当事件到达时自动醒来。
 
 
-> ruby有一个饭没的解决方案在标准库中，使用Queue类，让我们看一下
+> ruby有一个完美的解决方案在标准库中，使用Queue类，让我们看一下
 
 
 ###### Threads and Queues
 
-> 队列是先进先出的结构， 我们可以实现一个队列访问任何ruby代码通过require thread,它提供了一个简单的api
+> 队列是先进先出的结构， 通过require thread，我们可以实现一个队列访问任何ruby代码,它提供了一个简单的api
 
 
       require "thread"
       q = Queue.new
       t = Thread.new do
-      while last = q.pop
-      sleep(1) # simulate cost
-      puts last
-      end
-      end
+              while last = q.pop
+                sleep(1) # simulate cost
+                puts last
+              end
+          end
 
       q << :foo
       sleep(1)
       $stdout.flush
 
-> 上面代码，创建了队列Queue,和一个Thread， 在县城里是一个循环，调用Queue#pop()方法，如果队列里，如果队列里没有任何项，线程就会阻塞，直到新的项被添加到队列， 最后三行，我们将一个符号Push到队里了，将会唤醒线程，一秒后，我们flush ,写入$sdout,会看到foo
+> 上面代码，创建了队列Queue,和一个Thread， 在线程里是一个循环，调用Queue#pop()方法，如果队列里没有任何项，线程就会阻塞，直到新的项被添加到队列， 最后三行，我们将一个符号Push到队里了，将会唤醒线程，一秒后，我们flush ,写入$sdout,会看到foo
 
-> 这意味着队列对于我们是完美的结构用来作为订阅者，如果队列是空的请求进入睡眠，直到新事件到达，然后我们推送这个新事件然后进入睡眠，我们创建一个类叫做LiveAssets::SSESubscriber，用来接收这些时间，以server-sent stream format格式输出，如下测试
+> 这意味着队列对于我们是完美的结构用来作为订阅者，直到请求事件到达,队列一直时空的并且是睡眠状态，然后我们推送这个新事件之后，然后进入睡眠，我们创建一个类叫做LiveAssets::SSESubscriber，用来接收这些时间，以server-sent stream format格式输出，如下测试
 
     live_assets/2_listener/test/live_assets/subscriber_test.rb
     require "test_helper"
@@ -558,7 +560,7 @@
 
     require "live_assets"
 
-> 一些库简单的使用require就能工作的很好,但是随着他们不断增长，他们中的一些逐渐依赖于autoload技术避免一开始就读取全部文件,autoload是一个很重要的技术在rails plugin中，因为他能帮助application的启动时间低于在开发和测试环境，因为我们读取模块仅在我们第一次需要他们的时候。
+> 一些库简单的使用require就能工作的很好,但是随着他们不断增长，他们中的一些逐渐依赖于autoload技术避免一开始就读取全部文件,在rails plugin中autoload是一个很重要的技术，因为他能帮助application的启动时间低于在开发和测试环境，因为我们读取模块仅在我们第一次需要他们的时候。
 
 
 ###### Autoload techniques
@@ -569,11 +571,10 @@
       autoload :SSESubscriber, "live_assets/sse_subscriber"
     end
 
-> 现在，第一次time LiveAssets::SSESubscriber被范根，它会自动被读取，rails plugin和application还有另一个代码家在技术，就是rails的autoload，例如，我们的LiveAssetsController被自动加载当我们第一次使用它时，但是这个不是由ruby处理的，而是通过
-> rail自带的ActiveSupport::Dependencies
+> 现在，第一次 LiveAssets::SSESubscriber被访问，它会自动被读取，rails plugin和application还有另一个代码加载技术，就是rails的autoload，例如，我们的LiveAssetsController，当我们第一次使用它时被自动加载，但是这个不是由ruby处理的，而是通过rail自带的ActiveSupport::Dependencies
 
-> ruby和rails在的问题是加载代码不是原子性的， 它不是一个单独的步骤，例如，如果你有一个请求发生在A线程里,线程A启动读取LiveAssetsController，LiveAssetsController这个类在线程B中
->是可见的并且已经被一个请求响应，在Thread A完成加载app/controllers/live_assets_controller.rb文件之前，这种情况下，线程B只会看到有一部分控制器的方法，例如，可能紧包含一个hello()方法，没有sse方法，就会导致失败。
+> ruby和rails在一开始的问题是加载代码不是原子性的， 它不是一个单独的步骤，例如，如果你有一个请求发生在A线程里,线程A启动读取LiveAssetsController，LiveAssetsController这个类在线程B中
+>是可见的并且在Thread A完成加载app/controllers/live_assets_controller.rb文件之前，在线程B中已经被一个请求响应，这种情况下，线程B只会看到有一部分控制器的方法，例如，可能紧包含一个hello()方法，没有sse方法，就会导致失败。
 
 
 > 尽管一些Ruby实现一直致力于实现Ruby的加载线程安全(前面描述场景并不会发生),rails的autoload并不是线程安全，为了解决这个实际问题，无论何时rails autoload需要加载代码，默认rali只允许一个线程运行，那就意味着在一个时间点，只有一个线程提供服务，那就是为什么我们不能在同一时间使用server-sent events 链接提供资源服务。为了解决这个问题。我们让config.allow_concurrency设置为true。
@@ -584,7 +585,7 @@
 
 ###### Eager-Load Techniques
 
-> 在生产版本中，rails热加载你的代码，你全部的方法，控制器，帮助方法，在启动时就加载， 因为所有rails代码在启动时被加载，没有代码被重新加载，自动加载是关闭的，当没有autoload时，在rails程序中使用config.allow_concurrency 为true运行，是安全的这也是rails默认设置的
+> 在生产版本中，rails热加载你的代码，所有模型，控制器，帮助方法，在启动时就加载， 因为所有rails代码在启动时被加载，没有代码被重新加载，自动加载是关闭的，当没有autoload时，在rails程序中使用config.allow_concurrency设置为true运行是安全的。这也是rails默认设置的
 
 
 >然而，rails仅仅热加载定义在app目录下的代码。如果我们依赖于ruby autoload,我们需要自己热加载我们自己的代码，否则，我们可能要在一个请求中间加载代码，使用LiveAssets::SSESubscriber可能发生，假设这个场景:
@@ -601,10 +602,10 @@
 
     live_assets/3_final/lib/live_assets.rb
     module LiveAssets
-    extend ActiveSupport::Autoload
-    eager_autoload do
-    autoload :SSESubscriber
-    end
+     extend ActiveSupport::Autoload
+      eager_autoload do
+        autoload :SSESubscriber
+      end
     end
 
 
@@ -632,15 +633,15 @@
 
     live_assets/3_final/lib/live_assets.rb
     @@mutex = Mutex.new
-    def self.subscribe(subscriber)
-    @@mutex.synchronize do
-    subscribers << subscriber
-    end
-    end
-    def self.unsubscribe(subscriber)
-    @@mutex.synchronize do
-    subscribers.delete(subscriber)
-    end
+      def self.subscribe(subscriber)
+        @@mutex.synchronize do
+          subscribers << subscriber
+        end
+      end
+      def self.unsubscribe(subscriber)
+          @@mutex.synchronize do
+          subscribers.delete(subscriber)
+      end
     end
 
     http://code.macournoyer.com/thin/
