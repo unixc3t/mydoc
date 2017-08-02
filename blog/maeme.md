@@ -52,3 +52,35 @@
 > 使我们的engine更接近一个全新的Rails应用程序
 
 > 我们的插件已经设置好了,我们下一步开始探 ActiveSupport::Notifications API并且存储这些通知到数据库
+
+
+#### 7.2 Storing Notifications in the Database
+
+> 在我们实现存储通知逻辑到数据库之前，我们先看一下Notifications api
+
+###### The Notifications API
+
+> Notifications api包含两个方法，instrument() 和 subscribe() .前者当我们提交和发布一个事件时调用,例如action controller处理 如下
+
+    ActiveSupport::Notifications.instrument("process_action.action_controller",
+        format: :html, path: "/", action: "index") do
+      process_action("index")
+    end
+
+> 第一个参数是被发布事件名称, 在这里我们叫做process_action.action_controller,第二个参数是一个hash，包含了关于这个事件的信息,叫做payload ,为了订阅这些通知，我们仅仅需要传递这个事件名字和代码块给subscribe() 如下
+
+    event = "process_action.action_controller"
+    ActiveSupport::Notifications.subscribe(event) do |*args|
+      # do something
+    end
+
+> args是一个数组有五项
+
+* name: 事件名称字符串形式
+* started_at: 事件开始时的Time对象
+* ended_at: 事件结束时的Time对象 
+* instrumenter_id: 包含提交事件的唯一id
+* payload: 提交事件时作为payload的信息，是一个hash形式
+
+> 这就是我们需要知道的全部，下一步，我们看一下我们要存储通知的数据库
+
