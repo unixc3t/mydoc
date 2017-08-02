@@ -84,3 +84,120 @@
 
 > 这就是我们需要知道的全部，下一步，我们看一下我们要存储通知的数据库
 
+###### Using MongoDB
+
+> MongoDB是一个快速的完整的文档型数据库,适合存储notifications,因为notifications是数量多,价值低数据,你可以在他的官网读取更多有关他的信息, 包括安装在不同系统上的信息.
+
+> 目前,有好几个mongodb对象关系映射工具,我们将使用Mongoid在这个项目里, 我们不会介绍如何安装mongodb，如果你还没有安装，马上安上它, 安装后，我们添加mondoid作为一个我们插件的依赖
+
+    mongo_metrics/mongo_metrics.gemspec
+    s.add_dependency "mongoid", "~> 4.0.0"
+
+> 让我们在test/dummy application中生成mongoid的配置信息
+
+    $ rails g mongoid:config
+
+> 加载我们的插件时也要同时引入mongoid
+
+    mongo_metrics/1_engine/lib/mongo_metrics.rb
+    require "mongoid"
+    require "mongo_metrics/engine"
+
+    module MongoMetrics
+    end
+
+>有了mongoid配置文件, 我们创建第一个Model,app/models/mongo_metrics/metric.rb 
+
+    mongo_metrics/app/models/mongo_metrics/metric.rb
+    module MongoMetrics
+      class Metric
+        include Mongoid::Document
+      end
+    end
+
+> 在编写任何存储文档到mongodb之前，我们写一个测试在test/mongo_metrics_test.rb里，这个测试提交发布了一个名为process_action.action_controller事件,使用相关属性，断言一个metric被存储到Mongodb中，
+
+    mongo_metrics/test/mongo_metrics_test.rb
+    require "test_helper"
+
+    class MongoMetricsTest < ActiveSupport::TestCase
+      setup { MongoMetrics::Metric.delete_all }
+      test "process_action notification is saved in the mongo database" do
+        event = "process_action.action_controller"
+        payload = { "path" => "/" }
+
+        ActiveSupport::Notifications.instrument event, payload do
+          sleep(0.001) # simulate work
+        end
+        metric = MongoMetrics::Metric.first
+
+        assert_equal 1, MongoMetrics::Metric.count
+        assert_equal event, metric.name
+        assert_equal "/", metric.payload["path"]
+
+        assert metric.duration
+        assert metric.instrumenter_id
+        assert metric.started_at
+        assert metric.created_at
+      end
+    end
+
+> 当我们运行测试，因为我们没有存储任何东西，失败了
+
+    1) Failure:
+    test_process_action_notification_is_saved_in_the_mongo_database(MongoMetricsTest)
+    Expected: 1
+    Actual: 0
+
+> 为了确保测试通过,我们让我们订阅这个ActiveSupport::Notifications在lib/mongo_metrics.rb中
+
+    mongo_metrics/2_metrics/lib/mongo_metrics.rb
+    require "active_support/notifications"
+    module MongoMetrics
+      EVENT = "process_action.action_controller"
+
+      ActiveSupport::Notifications.subscribe EVENT do |*args|
+        MongoMetrics::Metric.store!(args)
+      end
+    end
+
+> 在我们的MongoMetrics::Metric中，我们的通知钩子简单的调用了store!()方法，这几个方法负责解析参数创建记录.
+
+    module MongoMetrics
+      class Metric
+        include Mongoid::Document
+
+        field :name, type: String
+        field :duration, type: Integer
+        field :instrumenter_id, type: String
+        field :payload, type: Hash
+        field :started_at, type: DateTime
+        field :created_at, type: DateTime
+
+        def self.store!(args)
+          metric = new
+          metric.parse(args)
+          metric.save!
+        end
+
+        def parse(args)
+          self.name            = args[0]
+          self.started_at      = args[1]
+          self.duration        = (args[2] - args[1]) * 1000000
+          self.instrumenter_id = args[3]
+          self.payload         = args[4]
+          self.created_at      = Time.now.utc
+        end
+      end
+    end
+
+> 添加这些修改后，我们的测试通过了, 为了查看我们的插件在测试环境以外是如何工作的，我们在test/dummy中创建一个HomeController ,
+> 里面有三个actions,然后启动dummy application
+
+  $ rails g controller Home foo bar baz
+  $ rails s
+
+> 发送请求可以通过 /home/foo , /home/bar , 和 /home/baz生成数据,当你请求后，可以打开一个rails console，命令行键入MongoMetrics::Metric.all.to_a，查看notifications被创建情况,
+
+> 虽然我们的订阅工作和期望的那样，但是使用一个页面替代使用rails console查看notifications不是更好?
+> 让我们再一次利用Rails engine 提供的动力！
