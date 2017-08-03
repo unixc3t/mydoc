@@ -393,8 +393,96 @@
 
 > 你可能注意到不止于此,为了访问被挂在的引擎,我们发出请求mongo_metrics/metrics，但是engine router仅匹配/metrics,而忽略了/mongo_metrics前缀, 为什么？
 
-> 无论何时一个请求到达一个Rack server， 这个server得到了这个请求路径，在environment hash中作为env["PATH_INFO"]的值来存储,同时将它传递给下面的Rack application.分发给一个被挂在的engine,rails移除/mongo_metrics从env["PATH_INFO"]中，所以engine仅仅看到/metrics(就如同浏览器在引擎里直接访问/metrics)
+> 无论何时一个请求到达一个Rack server， 这个server得到了这个请求路径，在environment hash中作为env["PATH_INFO"]的值来存储,同时将它传递给下面的Rack application.分发给一个被挂载的engine,rails移除/mongo_metrics从env["PATH_INFO"]中，所以engine仅仅看到/metrics(就如同浏览器在引擎里直接访问/metrics)
 
 >这个工作方式不仅仅适用于engines,也适用于任何rack application 因为这是racke本身规范中规定的.规范中也要求rails应该在调用被挂在engine之前设置env["SCRIPT_NAME"] = "/mongo_metrics",这告诉engine被挂在到指定点，允许engine生成完整urls
 
 > 总而言之,我们有一个rails application， 也是一个rack application,调用另一个rack application的 router， 最后分发给控制器和action，一个engine，甚至是一个sinatra application.这就是rack application的全部，更有趣的是，rack提供了中间件的概念，允许我们添加自定义代码在rack application中间，给了我们更大灵活性，我们下节学习
+
+####7.4　Middleware Stacks
+
+> 虽然 web服务器适配器和rack application api　改善了web框架开发方式，你或许更熟悉关于rack的另一个术语叫做:　中间件
+
+>一个中间件包装了一个rack application，它允许我们同时处理发送给应用程序的请求和应用程序返回的响应。通过在一个application前面叠放许多中间件,我们创建了一个中间件栈,任何到达控制器里的action的请求都要经历三个中间件栈，如下图
+![](20.png)
+
+> rails隐藏了这三个栈的第一个，它位于web服务器和rails application对象之间,仅包含两个中间件组件: 
+
+* Rails::Rack::LogTailer 解析日志文件和打印到控制台
+* Rails::Rack::Debugger 引入和激活debugger
+
+> 穿过了这个中间件栈，请求到达rails::Application(例如我们test/dummy中的Dummy:Application) 这仅仅是一个位于末端路由器的另一个中间件堆栈。
+
+> 这个栈就是rails中最被熟知的中间件栈，你可以通过config.middlewares来移除和添加中间件，
+> 在config/application.rb文件中配置生效,要查看所有生效的中间件，我们可以在application根目录中打开命令行输入rake middleware查看
+
+> 对于我们的dummy application，rake middleware返回如下
+
+    use　ActionDispatch::Static
+    use　Rack::Lock
+    use　#<ActiveSupport::Cache::Strategy::LocalCache::Middleware:0x007fed3d5eddf0>
+
+    use　Rack::Runtime
+    use　Rack::MethodOverride
+    use　ActionDispatch::RequestId
+    use　Rails::Rack::Logger
+    use　ActionDispatch::ShowExceptions
+    use　ActionDispatch::DebugExceptions
+    use　ActionDispatch::RemoteIp
+    use　ActionDispatch::Reloader
+    use　ActionDispatch::Callbacks
+    use　ActiveRecord::Migration::CheckPending
+    use　ActiveRecord::ConnectionAdapters::ConnectionManagement
+    use　ActiveRecord::QueryCache
+    use　ActionDispatch::Cookies
+    use　ActionDispatch::Session::EncryptedCookieStore
+    use　ActionDispatch::Flash
+    use　ActionDispatch::ParamsParser
+    use　Rack::Head
+    use　Rack::ConditionalGet
+    use　Rack::ETag
+    use　Rack::Mongoid::Middleware::IdentityMap
+    run　Dummy::Application.routes
+
+
+> 这个中间件栈将会基于你的依赖和rails环境而改变，例如Rack::Mongoid::Middleware::IdentityMap是Mongoid依赖，ActionDispatch::Reloader　经常用于开发环境，让我们看一下这个中间件列表
+
+* ActionDispatch::Static  在开发中给public　assets提供服务 
+
+* Rack::Lock  使用Mutex包装application，目的是在一个时间点，只有一个线程可以访问它，当我们设置config.allow_concurrency为true, 我们告诉rails移除这个中间件
+
+* ActiveSupport::Cache::Strategy::LocalCache  在请求期间使用内存提供局部缓存
+
+* Rack::Runtime  评测请求时间，header中在作为X-Runtime的值返回
+
+* Rack::MethodOverride 检查post请求，如果参数中有_method存在，转换他们到一个put或者delete请求
+
+* ActionDispatch::RequestId 设置请求id信息， 用在日志中
+
+* Rails::Rack::Logger 记录每个请求
+
+* ActionDispatch::DebugExceptions and ActionDispatch::ShowExceptions 在开发环境负责展示有帮助的错误页面，在生产环境中渲染来自public目录的状态页面
+
+* ActionDispatch::RemoteIp　检查处理ip欺骗
+* ActionDispatch::Callbacks and ActionDispatch::Reloader 生产环境中application启动调用to_prepare回调，开发环境中，每个请求之前调用
+
+> 下面三个中间件和Active Record有关，随后的中间件负责管理cookies， session, flash messages
+> 最后的是下面中间件
+
+* ActionDispatch::ParamsParser 解析请求中的参数 ，无论是从查询字符串还是在POST正文中
+
+* Rack::Head 转换 HEAD请求到 get请求
+
+* Rack::ConditionalGet 返回304状态码，如果缓存中有http header信息匹配
+
+* Rack::ETag 使用md5算法计算响应体的数字签名 设置它作为http响应头中ETag的值
+
+>栈中最后一站是application的router, 这又是另一个栈，如果router分发请求到一个控制器的action，
+>它将会穿过另一个中间件栈，因为每个控制器也有他自己的中间件栈，你可以添加一个中间件到控制器里。如下
+
+    class UsersController < ApplicationController
+      use MyMiddleware
+      use AnotherMiddleware
+    end
+
+> 控制器中间件栈在任何过滤器和action被处理器之前调用，因为rails提供许多选项装配中间件，一个中间件似乎看起来是实现这关闭我们的metrics存储的一个好的选择,让我们写我们第一个中间件
