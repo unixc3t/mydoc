@@ -363,3 +363,38 @@
     run Rails.application
 
 > 每个rails application也是一个rack application，它实现了call方法，接收系统环境参数，返回包含三个值的数组，默认情况,它发送请求到 application 路由，(默认是定义在config/routes.rb),如果匹配然后分发请求到另一个rack application
+
+
+###### Understanding the Rails Router
+
+> rails router可以分发给任何Rack application
+
+    Rails.application.routes.draw do
+    match "/hello", to:
+      lambda { |env| [200, { "Content-Type" => "text/plain" }, ["World"]] }
+    end
+
+> 当我们添加这个路由到任何Rails application中，打开浏览器地址栏键入 /hello
+> 我们从server得到“world”, 事实上我们有一个路由是这样
+
+    Rails.application.routes.draw do
+      match "/hello", to: "posts#index"
+    end
+
+> rails在请求之前，自动转换controller#action为一个rack application， 按照下面方式
+> 你可以从控制器得到任何action作为一个rack application
+
+    PostsController.action(:index)
+    PostsController.action(:index).responds_to?(:call) # => true
+
+> 无论何时当你使用router dsl 调用get(),put(),post(),delete(),resources()，或者resource()方法,这些方法都会调用match()方法，唯一有不同语义的方法就是mount()，这个方法用在dummy application中挂在我们的engine
+
+> match()方法匹配完整的路径,如果我们以正则表达式方式思考, 当我们讲到match "/mongo_metrics"，它仅仅以%r"\A/mongo_metrics\z"方式匹配路径(查询字符串不会被考虑匹配),然而，当我们挂载一个engine或者任何其他的racke application是，我们不仅要匹配/mongo_metrics，还要匹配/mongo_metrics/metrics , /mongo_metrics/other 等等，所以等价的正则表达式应该是%r"\A/mongo_metrics"，没有后面末尾\z
+
+> 你可能注意到不止于此,为了访问被挂在的引擎,我们发出请求mongo_metrics/metrics，但是engine router仅匹配/metrics,而忽略了/mongo_metrics前缀, 为什么？
+
+> 无论何时一个请求到达一个Rack server， 这个server得到了这个请求路径，在environment hash中作为env["PATH_INFO"]的值来存储,同时将它传递给下面的Rack application.分发给一个被挂在的engine,rails移除/mongo_metrics从env["PATH_INFO"]中，所以engine仅仅看到/metrics(就如同浏览器在引擎里直接访问/metrics)
+
+>这个工作方式不仅仅适用于engines,也适用于任何rack application 因为这是racke本身规范中规定的.规范中也要求rails应该在调用被挂在engine之前设置env["SCRIPT_NAME"] = "/mongo_metrics",这告诉engine被挂在到指定点，允许engine生成完整urls
+
+> 总而言之,我们有一个rails application， 也是一个rack application,调用另一个rack application的 router， 最后分发给控制器和action，一个engine，甚至是一个sinatra application.这就是rack application的全部，更有趣的是，rack提供了中间件的概念，允许我们添加自定义代码在rack application中间，给了我们更大灵活性，我们下节学习
