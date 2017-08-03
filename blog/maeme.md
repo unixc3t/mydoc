@@ -316,3 +316,50 @@
 
 > 现在我们适当的存储和显示来自Mongodb信息,我们可以看到我们每次访问我们engine页面，也会存储数据到mongodb里，如果每次访问插件本身时关闭metrics存储，那也是不切实际的。
 > 为了解决这个问题,让我们提供一个方案在某些地方静音notifications,为了做到这一点。我们需要理解rails是如何集成Rack的
+
+### 7.3 Rails and Rack
+
+> 引用[rake文档](http://rack.rubyforge.org/doc/)
+
+  Rack使用ruby提供了一个微型,模块化,适用性强的web开发接口,最简单的方式包装了http请求和响应,它统一提取api,使web服务器,web框架和软件之间可以通过一个单独方法调用
+
+> rails application 需要一个web服务器与http协议交互,从早年起,rail社区有大量的web服务器可以用来部署applications
+
+> 在初期,rails负责提供支持每个web服务器的适配器,一个是Mongrel 另一个是WEBrick,还有一个 Thin,等等。类似，其他web框架对于同样的web服务器不得不提供不同的适配器，因为他们与rails的api不同
+
+> 这很快的变成了一种重复性工作,在2007年初,racke以统一web服务器和框架api的目标而发布,通过racke api， 一个web框架可以使用racke web服务器适配器替代它自己的适配器,移除了这些ruby社区里的重复工作
+
+> 虽然rails 2.2已经提供了,一个简单的racke 接口，rails更密切的拥抱rack和他的2.3版本api
+> racke的重大变革发生在rails 3中，rails中的几个部分变成了 rack endpoints，你可以简单的
+> 挂载不同的rack application按照同样的方式,例如我们可以挂载Sinatra application到rails router里，类似我们这章挂载一个engine到dummy appliation里
+
+##### Hello, Rack!
+
+> Rack规范清晰的描述了rack application如何与一个web server之间通讯的api
+
+      一个Rack application可以是任何能够响应call方法的对象, 明确接收一个environment参数，必须返回一个包含三个元素的数组 三个元素值是 status,headers 和body
+  
+> rake的最小限度的api允许我们编写一个web程序只用几行代码
+
+    require 'rack'
+    class HelloRack
+        def call(env)
+          [200, { 'Content-Type' => 'text/html' }, ['Hello Rack!']]
+        end
+    end
+    run HelloRack.new
+
+> 通过在目录里先创建config.ru文件， 在同一目录的命令行上调用rackup命令，rack 启动了一个web服务器，每个请求都调用我们的HelloRack application。 当你打开一个浏览器输入
+> http://localhost:9292/时，你会看到hello rack 在响应体中返回
+
+    Invoked like so:
+
+    $ rackup config.ru
+
+> 所有的rails application都带有一个config.ru文件，和我们在dummy application目录test/dummy下看到的一样 如下内容
+
+    # This file is used by Rack-based servers to start the application.
+    require ::File.expand_path('../config/environment', __FILE__)
+    run Rails.application
+
+> 每个rails application也是一个rack application，它实现了call方法，接收系统环境参数，返回包含三个值的数组，默认情况,它发送请求到 application 路由，(默认是定义在config/routes.rb),如果匹配然后分发请求到另一个rack application
