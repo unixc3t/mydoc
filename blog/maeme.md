@@ -201,3 +201,118 @@
 
 > 虽然我们的订阅工作和期望的那样，但是使用一个页面替代使用rails console查看notifications不是更好?
 > 让我们再一次利用Rails engine 提供的动力！
+
+###### The Notifications Page
+
+> 创建Notifications页面，我们创建一个控制器,一个试图，路由在engine里, 我们从控制器开始
+
+    mongo_metrics/app/controllers/mongo_metrics/metrics_controller.rb
+    module MongoMetrics
+      class MetricsController < ApplicationController
+      respond_to :html, :json
+        def index
+          @metrics = Metric.all
+          respond_with(@metrics)
+        end
+        def destroy
+          @metric = Metric.find(params[:id])
+          @metric.destroy
+          respond_with(@metric)
+        end
+      end
+    end
+
+> 我们的控制器有两个actions，index()和destroy()，对于第一个，我们需要一创建一个视图
+
+    mongo_metrics/2_metrics/app/views/mongo_metrics/metrics/index.html.erb
+    <h1>Listing Metrics</h1>
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>Duration</th>
+        <th>Started at</th>
+        <th>Payload</th>
+        <th></th>
+      </tr>
+      <%= content_tag_for :tr, @metrics do |metric| %>
+      <td><%= metric.name %></td>
+      <td><%= metric.duration / 1000 %>ms</td>
+      <td><%= time_ago_in_words metric.started_at %> ago</td>
+      <td>
+        <ul>
+          <% metric.payload.each do |k, v| %>
+                <li><%= k.humanize %>: <%= v %></li>
+          <% end %>
+        </ul>
+      </td>
+      <td><%= link_to 'Destroy', metric_path(metric),
+        method: :delete, data: { confirm: 'Are you sure?' } %>
+        </td>
+      <% end %>
+    </table>  
+
+> 对于页面上的Destroy链接，我们需要引入jqueyr-rails gem添加到依赖里
+
+    mongo_metrics/mongo_metrics.gemspec
+    s.add_dependency "jquery-rails", "~> 3.0.1"
+
+> 然后需要在lib/mongo_metrics.rb顶部引入这个依赖,如下
+
+    mongo_metrics/lib/mongo_metrics.rb
+    require "jquery-rails"
+
+> 需要在javascript清单文件中引入jquery和jquery_ujs
+
+    mongo_metrics/app/assets/javascripts/mongo_metrics/application.js
+    //= require jquery
+    //= require jquery_ujs
+    //= require_tree .
+
+> 最后我们添加路由
+
+    mongo_metrics/config/routes.rb
+    MongoMetrics::Engine.routes.draw do
+      root to: "metrics#index"
+      resources :metrics, only: [:index, :destroy]
+    end
+
+> 注意我们声明路由时不需要担心命名空间,我们的engine是可挂载的而且是独立的。rails在每个路由上制定了命名空间帮我们解决了这个问题,此外, 在视图中,我们简单的调用metric_path()方法，rails自动的去engine中查找路由,而不是在application中查找路由,即使application有一个路由叫做metric_path()，这两个路由也不会冲突
+
+> 然而，有一个问题,假如我们想从engine路由中访问application的路由，或者从application路由中访问engine路由呢？
+
+> 为了阐述这个问题,我们写了一个集成测试，我们测试需要访问一组dummy application中的页面然后检查我们的插件页面,确保这些notifications被适当的显示
+
+    mongo_metrics/2_metrics/test/integration/navigation_test.rb
+    require "test_helper"
+
+    class NavigationTest < ActionDispatch::IntegrationTest
+        setup { MongoMetrics::Metric.delete_all }
+
+        test "can visualize notifications" do
+
+          get main_app.home_foo_path
+          get main_app.home_bar_path
+          get main_app.home_baz_path
+          get mongo_metrics.root_path
+
+          assert_match "Path: /home/foo", response.body
+          assert_match "Path: /home/bar", response.body
+          assert_match "Path: /home/baz", response.body
+        end
+
+        test "can destroy notifications" do
+            get main_app.home_foo_path
+            metric = MongoMetrics::Metric.first
+            delete mongo_metrics.metric_path(metric)
+            assert_empty MongoMetrics::Metric.where(id: metric.id)
+        end
+    end
+
+>我们的测试立刻通过了，注意，每次我们想访问一个application页面时我们都是用main_app()zuo作为代理,访问挂载的engine中的页面使用mongo_metrics()作为代理,engine代理的名字可以在dummy application里使用rake routes命令查看
+
+![](19.png)
+
+> 代理的名字在Prefix那列,rake routes也同样展示了挂在的engine的路由，如果你想的话，可以启动dummy app 然后使用你的浏览器访问notifications页面
+
+> 现在我们适当的存储和显示来自Mongodb信息,我们可以看到我们每次访问我们engine页面，也会存储数据到mongodb里，如果每次访问插件本身时关闭metrics存储，那也是不切实际的。
+> 为了解决这个问题,让我们提供一个方案在某些地方静音notifications,为了做到这一点。我们需要理解rails是如何集成Rack的
