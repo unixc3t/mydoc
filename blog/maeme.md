@@ -596,3 +596,20 @@
       use MuteControllerMiddleware
     end
 
+
+#### Trimming Down the Middleware Stack
+
+>当我们在dummy application中执行rake middleware，包含了一组和Active Record相关的中间件,事实上 我们有一个rails gem依赖,它依赖active record和其他gems. 例如Action Mailer 但是我们并没有使用它，让我们分割rails 依赖为两个更小的依赖
+
+    mongo_metrics/mongo_metrics.gemspec
+    s.add_dependency "railties", "~> 4.0.0"
+    s.add_dependency "sprockets-rails", "~> 2.0.0"
+
+> rails gem是一个 meta gem,没有携带任何代码,相反，它简单的包含了rails默认栈作为依赖，那就是为什么它依赖ractive record， Action Mailer, Sprockets 等等，在我们的例子里
+> 我们使用railties gem替换 rails gem， railties 是一个rails骨架，包含了booting processes, railties, engine 和 application 等等，除了sprockets-rails允许
+>为我们的资源服务， railties gem 依赖actionpack(用于routes, controllers, and views) ，和activesupport,所以我们不需要直接添加他们。
+
+> 在这些改变之后,我们的application不启动了,因为我们的application配置文件里有一些依赖被我们移除了，那就是说，确保从test/dummy/config/environments文件里移除onfig.active_record 和 config.action_mailer,所以检查你的测试文件，确保没有调用相关的fixtures,例如test/integration/navigation_test.rb文件的fixtures:all
+
+
+> 如果你再次运行 rake middleware，ActiveRecord中间件不会出现在我们的栈里，我们刚才完成的处理过程，类似如何精简rails application的依赖，主要步骤就是替换rails gem，直接显示指定依赖，清理配置文件,当我们生成application和插件时，我们可以移除一些组件例如Sprockets 和 Active Record，当调用rails new 或 rails plugin new我们也可以简单的传递--skip-sprockets 或 --skip-active-record
