@@ -486,3 +486,113 @@
     end
 
 > 控制器中间件栈在任何过滤器和action被处理器之前调用，因为rails提供许多选项装配中间件，一个中间件似乎看起来是实现这关闭我们的metrics存储的一个好的选择,让我们写我们第一个中间件
+
+
+###### Building the MuteMiddleware
+
+> 在编写我们的中间件之前,我们需要确保MongoMetrics提供一个方法为一段代码块静音通知
+> 我们叫这个方法为mute!(),并且提供一个mute?()方法，当通知被静音的时候，返回true
+
+    mongo_metrics/3_final/test/mongo_metrics_test.rb
+    test 'can ignore notifications when specified' do
+      MongoMetrics.mute! do
+        assert MongoMetrics.mute?
+        event = "process_action.action_controller"
+        ActiveSupport::Notifications.instrument event do
+          sleep(0.001) # simulate work
+        end
+      end
+        assert !MongoMetrics.mute?
+        assert_equal 0, MongoMetrics::Metric.count
+    end
+> 为了使我们测试通过,我们实现这两个方法，并且修改传递给subscribe方法的代码块，需要考虑mute这个条件
+
+    mongo_metrics/lib/mongo_metrics.rb
+    require "mongoid"
+    require "jquery-rails"
+    require "mongo_metrics/engine"
+    require "active_support/notifications"
+
+    module MongoMetrics
+      EVENT = "process_action.action_controller"
+      ActiveSupport::Notifications.subscribe EVENT do |*args|
+        MongoMetrics::Metric.store!(args) unless mute?
+      end
+
+      def self.mute!
+        Thread.current["sql_metrics.mute"] = true
+        yield
+      ensure
+        Thread.current["sql_metrics.mute"] = false
+      end
+
+        def self.mute?
+          Thread.current["sql_metrics.mute"] || false
+        end
+      end
+
+> 注意我们使用线程变量确保静音一个请求在一个线程里不会影响线程环境中的其他线程,我们需要包装yield()在一个ensure块中调用，如果执行代码块发生异常允许静音状态还原，让我们也测试它
+
+      mongo_metrics/3_final/test/mongo_metrics_test.rb
+      test 'does not leak mute state on failures' do
+        MongoMetrics.mute! do
+          assert MongoMetrics.mute?
+          raise "oops"
+        end rescue nil
+        
+        assert !MongoMetrics.mute?
+      end
+
+> 已经实现了mute!()，我们可以编写MuteMiddleware，为了确保我们的中间件工作如预期,让我们编写一个集成测试，断言访问我们的metrics控制器不会产生任何事件
+
+    mongo_metrics/3_final/test/integration/navigation_test.rb
+    test "does not log engine actions" do
+      get mongo_metrics.root_path
+      assert 0, MongoMetrics::Metric.count
+    end
+
+> 任何中间件都是用application初始化的,或者在栈中一个中间件调用下一个，无论我们的MuteMiddleware中间件什么时候被调用,它仅在一个Mute!()块中调用底层application，可以有效的静音发生在下游的所有事情, 让我们实现它:
+
+    mongo_metrics/3_final/lib/mongo_metrics/mute_middleware.rb
+    module MongoMetrics
+      class MuteMiddleware
+          def initialize(app)
+            @app = app
+          end
+        def call(env)
+          MongoMetrics.mute! { @app.call(env) }
+        end
+      end
+    end
+
+> 因为一个普通的rails请求要穿过三个不同的中间件栈,我们需要评估使用我们中间件在哪个地方使用最合适
+
+* 放在web服务器和rails　application之间的栈中很难做到,所以这是不可能的
+* 放在application里面也不合适,因为添加这个中间件到栈里，将会静音所有请求
+* 在控制器内部的栈里添加是最适合，因为我们可以直接添加到MongoMetrics::ApplicationController里
+
+> 然而，当一个请求到达一个engine,这还有一个中间件栈,在appliction router和engine router之间，他是engine自己的中间件栈，如下图
+![](21.png )
+
+> 这个中间件栈类似rails application 栈，但是默认是空的，如果我们添加我们的中间件到engine 栈中，任何请求到达我们的metrics插件，控制器都不会关心, 走回自动静音，这似乎很方便；我们将中间件添加到这个栈中
+
+    mongo_metrics/3_final/lib/mongo_metrics/engine.rb
+    require "mongo_metrics/mute_middleware"
+      module MongoMetrics
+        class Engine < ::Rails::Engine
+          isolate_namespace MongoMetrics
+          config.middleware.use MuteMiddleware
+        end
+      end
+
+> 我们可以通过config.middleware配置engine中间件栈，如果我们在一个rails application里面，我们也适用config.middleware，config.middleware总是只想当前engine或者application的中间件栈,如果我们想从engine中修改application中间栈，我们可以通过config.app_middleware.
+
+> 添加这些改变后,我们的测试一次通过，通过使用middleware,我们可以容易的关闭metrics存储插件和application的指定部分，如果我们想关闭application中指定的控制器或者指定的actions
+> 我们可以这么做
+
+    class AdminController < ApplicationController
+      # You could also use :only and :except options.
+      # use MuteControllerMiddleware, only: :index
+      use MuteControllerMiddleware
+    end
+
