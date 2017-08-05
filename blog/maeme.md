@@ -613,3 +613,117 @@
 
 
 > 如果你再次运行 rake middleware，ActiveRecord中间件不会出现在我们的栈里，我们刚才完成的处理过程，类似如何精简rails application的依赖，主要步骤就是替换rails gem，直接显示指定依赖，清理配置文件,当我们生成application和插件时，我们可以移除一些组件例如Sprockets 和 Active Record，当调用rails new 或 rails plugin new我们也可以简单的传递--skip-sprockets 或 --skip-active-record
+
+
+##### 7.5 Streaming with Rack
+
+> 虽然我们能够改进metrics application,显示漂亮的图形和报告，我们将提供导出数据库数据的方法，使数据可以被第三方服务和工具解析
+
+> 默认方案就是使用send_data()方法将数据从服务端发送到客户端.然而,这个方案需要我们生成想发送的整个字符串，这将花费大量时间和占用许多内存，为了解决这个问题，我们使用流推送数据，允许我们以数据片段方式发送数据到客户端，不需要占用大量内存
+
+>在前面，我们使用了live-streaming工具发送数据，现在，我们根据rake规范的灵活性实现这个，我们发送数据格式是csv，因为客户端可以一行一行解析数据，ruby已经内建了转换数据成csv格式的工具
+
+
+###### Streaming Redux
+
+> rack规范描述一个有效的响应体可以使任何ruby对象， 只要可以响应each方法，那就是为什么我们通常使用arrays存储响应体
+
+    class HelloRack
+      def call(env)
+        [200, { 'Content-Type' => 'text/html' }, ['Hello Rack!']]
+      end
+    end
+
+> rake web服务器使用each方法循环响应体，并且输出产生的数据，因为数组可以响应each方法，它生成hello rack
+
+> 按照api约定，我们可以实现流推送，在racke中通过简单的自定义响应体，通过each实现一个自定义的迭代, 下面代码就是我们如何仅仅使用racke实现
+
+    class StreamingRack
+      def call(env)
+        [ 200, { 'Content-Type' => 'text/html' }, self]
+      end
+      def each
+        while true
+          yield 'Hello Rack!\n'
+        end
+      end
+    end
+
+> 编写上面代码到config.ru文件，然后运行 rackup -s puma 启动rack application,
+> 我们再次通过命令行使用curl，查看数据发送
+
+    $ curl -v localhost:9292/
+
+> 就是这样，使用rack推送流数据，就是十分容易
+
+
+### CSV Streamer
+
+> 让我们开始实现　CSV-streamer，编写一个测试　访问metrics路径，以.csv后缀，然后从服务器端得到csv文档
+
+    mongo_metrics/3_final/test/integration/navigation_test.rb
+      test "exports data to csv" do
+        get main_app.home_foo_path
+        get mongo_metrics.metrics_path(format: :csv)
+        assert_match "process_action.action_controller,", response.body
+     end
+
+> 因为处理csv请求的路由已经定义，我们仅仅需要改变MongoMetrics::MetricsController响应csv请求，我们的　index()已经使用respond_with()，所以下面代码应该足够得到一个csv响应返回
+
+    mongo_metrics/app/controllers/mongo_metrics/metrics_controller.rb
+    module MongoMetrics
+    class MetricsController < ApplicationController
+      respond_to :html, :json
+      respond_to :csv, only: :index
+
+
+> 然而我们回忆　6.2Exploring ActionController::Responder, rails首先尝试渲染一个模板，如果不存在，然后回头调用　render csv: @metrics, 问题是rails没有首先csv渲染器，我们需要自己编写，幸运的是我们前面学习了如何编写
+
+
+> 我们想让我们的csv渲染器发送一个文件给用户，以流的形式一点一点发送，渲染器能够设置一个自定义对象作为响应体,我们叫做CSVStreamer,我门来实现它
+
+    mongo_metrics/3_final/lib/mongo_metrics/csv_streamer.rb
+    module MongoMetrics
+      ActionController::Renderers.add :csv do |model, options|
+        headers = self.response.headers
+        headers["Content-Disposition"] =
+        %(attachment; filename="#{controller_name}.csv")
+        headers["Cache-Control"] = "no-cache"
+        headers.delete "Content-Length"
+          self.content_type ||= Mime::CSV
+          self.response_body = CSVStreamer.new(model)
+        end
+
+        class CSVStreamer
+          def initialize(scope)
+            @scope = scope
+          end
+          def each
+            @scope.each do |record|
+              yield record.to_csv
+          end
+        end
+      end
+    end
+
+> 首先。我们设置了Content-Disposition头信息，告诉浏览器我们发送一个附件
+> 第二，我们关闭了缓存和移除了内容长度，通知地底层的racke服务器 我们想发送流数据，最后
+> 我们设置内容类型和设置响应体为我们自定义的csvStramer对象
+
+> 注意，我们的streamer对象调用to_csv()方法在每个metrics记录上，所以我们需要实现to_csv()方法，因为ruby提供了一个库，叫做csv，用来生成和解析csv 我们需要require它，使用它转换存储metrics信息的数组到csv
+
+    mongo_metrics/app/models/mongo_metrics/metric.rb
+    require "csv"
+    def to_csv
+      [name, started_at, duration, instrumenter_id, created_at].to_csv
+    end
+
+> 最后一部，确保我们的测试通过，需要require mongo_metrics/csv_streamer，这个文件定义了我们的渲染器，确保在我们的控制器里有效 
+
+  mongo_metrics/lib/mongo_metrics.rb
+  require "mongo_metrics/csv_streamer"
+
+> 我们最新的测试通过了，虽然我们使用rack实现了csv流推送和我们使用ActionController::Live 实现有一点不同，它有同样的限制，在部署时仍要小心，我们可以测试我们的末端，疑问我们不是无限发送数据。 不像Streaming Server Events to Clients Asynchronously
+
+> 所以，实现流推送，ActionController::Live和Rack 推送，我们应该选择哪个方案？ 通常，live stream 更可取，因为rack流推送基于rack的基础api，一个web服务器不知道哪种响应会被发送回去，长流还是短流，Live streaming, 换句话说，是一种rails抽象，可以从开发者代码中进化，提高底层流的功能， 在任何情况， 使用rake发送流数据适用于小型rack application，没有
+> 访问rails提供方式便利
