@@ -12,4 +12,5 @@
   * [Streaming Server Events to Clients Asynchronously](sseca.md)
   * [Writing DRY Controllers with Responders](wdcwr.md)
   * [Managing Application Events with Mountable Engines](maeme.md)
+  * [Translating Applications Using Key-Value Back Ends](taub.md)
   
