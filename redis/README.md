@@ -1,0 +1,1 @@
+* [安装配置redis](install.md)
