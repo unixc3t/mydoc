@@ -244,3 +244,197 @@
     db["en.number.precision"] # => "{\"format\":{\"delimiter\":\"\"}}"
 
 > 注意key-valu数据库会自动转义值为json
+
+
+#### 8.3 Rails and Sinatra
+
+> 翻译已经被适当的存储，我们现在能够使用Sinatra编写翻译app，Sinatra是一个可以用ruby轻松地快速开发web app的dsl ，hello world仅需要一行代码
+
+    # myapp.rb
+    require 'sinatra'
+      get '/' do
+        'Hello world!'
+      end
+
+> 我们不能直接访问Sinatra app，但是我们将它整合进我们的rails app， 允许我们复用rails已经存在的生态系统，例如test,sessions,authentication,等等， 在我们开发Sinatra app之前，我们再次使用capybara编写一个集成测试，使用capybara确保我们的测试健壮可读，首先我们在test/test_helper.rb中定义ActiveSupport::IntegrationCase，引入Capybara的dsl
+
+    translator/1_app/test/test_helper.rb
+    require "capybara"
+    require "capybara/rails"
+    # Define a bare test case to use with Capybara
+    
+    class ActiveSupport::IntegrationCase < ActiveSupport::TestCase
+      include Capybara::DSL
+      include Rails.application.routes.url_helpers
+    end
+
+> 我们定义的和 前面2.2节一样，现在添加capybara到gemfile里。
+
+    translator/1_app/Gemfile
+    group :test do
+      gem 'capybara', '~> 2.0.0'
+    end
+
+> 我们的测试企图使用波兰地区本地化一个日期，但是会失败，因为我们没有这个地区的任何翻译数据，下一步，我们访问翻译url /translator/en/pl , 目的是转换信息从英语到波兰语， 填充这些翻译属性，存储这些翻译
+> 之后，我们断言我们翻译成功存储，我们可以本地化日期，下面是实现
+
+    translator/test/integration/translator_app_test.rb
+    require "test_helper"
+      class TranslatorAppTest < ActiveSupport::IntegrationCase
+        # Set up store and load default translations
+        setup { Translator.reload! }
+    
+        test "can translate messages from a given locale to another" do
+            assert_raise I18n::MissingTranslationData do
+            I18n.l(Date.new(2010, 4, 17), locale: :pl)
+        end
+    
+        visit "/translator/en/pl"
+        fill_in "date.formats.default", with: %{"%d-%m-%Y"}
+        click_button "Store translations"
+  
+        assert_match "Translations stored with success!", page.body
+        assert_equal "17-04-2010", I18n.l(Date.new(2010, 4, 17), locale: :pl)
+      end
+    end
+
+
+> 我们的设置调用一个叫做ranslator.reload!()方法，这个方法负责移除数据里所有的keys，重新加载翻译数据，让我们实现它
+
+    translator/1_app/lib/translator.rb
+    def self.reload!
+      store.flushdb
+      I18n.backend.load_translations
+    end
+
+> 我们的测试准备好执行rake test，　但是失败了。因为我们的Sinatra app没有构建好，所以我们添加sinatra和haml到我们的project gemfile ,使用bundle install安装这些依赖
+
+    translator/Gemfile
+    gem 'sinatra', '~> 1.4.2', require: 'sinatra/base'
+    gem 'haml', '~> 4.0.2'
+
+
+> 我们的sinatra app应该定义　/:from/:to这样的路由，当访问的时候，渲染一个模板，使用:from地区翻译数据翻译成:to区域，我们的第一次代码迭代
+
+        module Translator
+          class App < Sinatra::Base
+            set :environment, Rails.env
+            enable :inline_templates
+
+            get "/:from/:to" do |from, to|
+              exhibit_translations(from, to)
+            end
+
+            protected
+
+            # Store from and to locales in variables and retrieve
+            # all keys available for translation.
+            def exhibit_translations(from, to)
+              @from, @to, @keys = from, to, available_keys(from)
+              haml :index
+            end
+
+            # Get all keys for a locale. Remove the locale from the key and sort them.
+            # If a key is named "en.foo.bar", this method will return it as "foo.bar".
+            def available_keys(locale)
+              keys  = Translator.store.keys("#{locale}.*")
+              range = Range.new(locale.size + 1, -1)
+              keys.map { |k| k.slice(range) }.sort!
+            end
+
+            # Get the value in the translator store for a given locale. This method
+            # decodes values and checks if they are a hash, as we don't want subtrees
+            # available for translation since they are managed automatically by I18n.
+            def locale_value(locale, key)
+              value = Translator.store["#{locale}.#{key}"]
+              value if value && !ActiveSupport::JSON.decode(value).is_a?(Hash)
+            end
+          end
+        end
+        __END__
+
+        @@ index
+        !!!
+        %html
+          %head
+            %title
+              Translator::App
+          %body
+            %h2= "From #{@from} to #{@to}"
+
+            %p(style="color:green")= @message
+
+            - if @keys.empty?
+              No translations available for #{@from}
+            - else
+              %form(method="post" action="")
+                - @keys.each do |key|
+                  - from_value = locale_value(@from, key)
+                  - next unless from_value
+                  - to_value = locale_value(@to, key) || from_value
+                  %p
+                    %label(for=key)
+                      %small= key
+                      = from_value
+                    %br
+                    %input(id=key name=key type="text" value=to_value size="120")
+                %p
+                  %input(type="submit" value="Store translations")
+
+> 关于这个实现，有一些东西需要讨论,首先我们直接将rails环境变量发送给sinatra app环境变量,然后我们定义路由/:from/:to响应get方法，如果路由匹配， sinatra将产生两个参数给代码块，然后代码块执行。　代码块简单的调用了exhibit_translations(),将参数赋值给实例变量，然后得到所有本地化的用于翻译和渲染模板的key
+
+
+> 在这个例子中，我们选择haml作为模板妙计语言，这个模板仅仅是几行代码，通过Sinatra的内揽模板特性，被定义在作为 app的同一个文件里，在app文件的前面激活，然而，重要的是注意模板和app一样的上下文中执行，　这意味着任何定义在sinatra app里的方法也可以用在模板里，包括实例变量。　这种方案不同于rails中，因为rails的模板不会执行在与controllers相同上下文，而是一个指定的视图上下文，　所以rails需要暗地里拷贝全部实例变量从控制器到试图．１．３那节我们已经看到。控制器方法应该按照controller.method()形式调用
+
+> 最后注意到我们的模板调用了locale_value()方法，这个方法接收一个local和一个 key ,返回存储在redis中的值，　这个方法可以处理hash，用来创建和存储i18n的默认设置，允许你接收来自后端的子节点
+
+
+> 在i18n中，无论何时你存储了一个翻译{ "foo.bar" => "baz" }，它都会分解 foo.bar，存储{ "foo" => { "bar" => "baz"} }作为翻译，　这就允许你接收使用i18n.t("foo.bar")　#=“bar”或者子节点形式I18n.t("foo") #=> { "bar" => "baz" } .这就是说，如果我们展示hashes按照我们的sinatra接口，翻译会重复，因为可能出现使用foo key子节点hash，或者完整foo.bar key
+
+
+> 在我们尝试我们的Sinatra app之前，我们autoload它
+
+    translator/lib/translator.rb
+    autoload :App, "translator/app"
+
+> 最后我们在路由中挂在它
+
+    translator/1_app/config/routes.rb
+      Translator::Application.routes.draw do
+      mount Translator::App, at: "/translator"
+    end
+
+> 让我们开启服务器rails server 验证我们的工作效果，浏览器访问/translator/en/pl，我们得到一个翻译页面如下
+
+![](22.png)
+
+> 这个页面自动设置翻译信息从英文语到波兰语， 不要点击提交按钮,因为我们还没实现Post行为, 事实上,让我们运行测试时，失败也是基于这个原因， 在测试里点击提交按钮，会返回“No route matches"
+
+    1) Error:
+    test_can_translate_messages_from_a_given_locale_to_another(TranslatorAppTest)
+    ActionController::RoutingError: No route matches [POST] "/translator/en/pl"
+
+> 为了确保测试通过，让我们添加一个路由到sinatra用于post请求， 这个新路由应该在i8n后端存储翻译，传递目标区域和将翻译从json解码成ruby ，然后在redis数据库里调用save()，轻强制它存储到文件系统，然后再一次显示翻译页面
+
+    translator/2_final/lib/translator/app.rb
+    post "/:from/:to" do |from, to|
+      I18n.backend.store_translations to, decoded_translations, escape: false
+      Translator.store.save
+      @message = "Translations stored with success!"
+      exhibit_translations(from, to)
+    end
+    protected
+    # Get all translations sent through the form and decode
+    # their JSON values to check validity.
+    def decoded_translations
+      translations = params.except("from", "to")
+      translations.each do |key, value|
+          translations[key] = ActiveSupport::JSON.decode(value) rescue nil
+       end
+    end
+
+> 注意当存储翻译时我们设置 :escape为false,所以i18n能适当的生成子节点，如果你指定翻译如{ "foo.bar" => "baz" }， i18n将会把它作为单独key， 编码为{ "foo\000.bar" => "baz" }，当按这种方式存储，我们不能接收他的子节点以i18n.t("foo")形式，如果我们将escaping 设置为false，i18n能够将Key分解，传唤它为{ "foo" => { "bar" => "baz" } },并且允许我们接收I18n.t("foo") 或 I18n.t("foo.bar")
+
+> 可以自由的重启服务器，转换所有数据从一种语言到另一种，注意，我们选择json形式表现数据，因为我们可以简单的表达数组，字符串，数字，和布尔。
+
+> 此时，我们的测试都通过了，我们的翻译 app基本准备好了， 是时候使用devise添加验证,使用capybara让我们的测试更健壮
