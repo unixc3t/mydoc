@@ -123,10 +123,124 @@
       # ...
     end
 
-> draw()方法使用代码重载方式工作，每次路由文件改变， 之前的路由都被清楚，然后被重现加载config/routes.rb中的路由和插件。 然而，有一些情况, 一些路由可能定义在初始化阶段或者一个不会被重新加载的文件里， 对于这种情况，rails提供了 routes.prepend和routes.append方法定义这样的路由
+> draw()方法主要工作是代码重载，每次路由文件改变， 之前的路由都被清除，然后被重现加载config/routes.rb中的路由和插件。 然而，有一些情况, 一些路由可能定义在初始化阶段或者一个不会被重新加载的文件里， 对于这种情况，rails提供了 routes.prepend和routes.append方法定义这样的路由
 
 > 例如 如果你使用routes.draw定义路由在config/application.rb里面，在开发阶段不会被重新加载，你在config/routes.rb的改变会立刻导致路由重新被加载，但是定义在application里的就会被遗忘
 
 > 对于单个文件的rails app的请求和其他rails app请求一样, web服务器调用SingleFile#call()方法，穿过中间件栈到达路由，在我们的例子里，路由简单的匹配根action
 
-> 我们现在理解了application的职责，并且知道如何构建railties和engines，现在是时候回头构建使用i18n api我们的翻译后端
+> 我们现在理解了application的职责，并且知道如何构建railties和engines，现在是时候回头构建使用i18n api的翻译后端
+
+
+#### 8.2 I18n Back Ends and Extensions
+
+> 在我们的app里，无论何时，我们调用i18n.translate()或者i18n.localize()方法，他都委托这些方法给存储在i18n.backend()的i18n后端。 通过替换这个后端程序，你可以完全的修改i18n库怎样工作，i8n框架携带了三种不同后端
+
+* I18n::Backend::Simple: 将yaml的翻译存储在内存中的hash里 默认的后端
+
+* I18n::Backend::KeyValue: 使用任何key-value存储作为后端，只要它满足最小api
+
+* I18n::Backend::Chain : 允许你组成后端链，换句话说，如果一个翻译在一个后端里没有找到，它会寻找链里的下一个后端
+
+> rails依赖i18n提供的血多特性，例如，在我们的翻译app里，我们在config/environments/production.rb
+> 看到下面这行
+
+    config.i18n.fallbacks = true
+
+> 每当这个配置选项设置为true， rails配置i18n框架在当前后端include 回退功能，允许如果翻译没有在当前区域找到，就回退去找默认翻译,如果你在rails app外面使用i18n， 你也可以使用回退功能，如下代码
+
+    I18n.backend.class.send(:include, I18n::Backend::Fallbacks)
+
+> 另一个i18n特性就是音译支持，允许你使用非重音字符替换重音拉丁字符
+
+    I18n.transliterate("dzi ę kuj ę ") # => "dziekuje"
+
+> 如果你需要翻译Hebraic, Cyrillic, Chinese，或者其他字符，你可以添加音译规则，记住音译和回退不是后端，而是这里列出的几个扩展中的一个 ，这些扩展由i18n库提供
+
+* I18n::Backend::Cache : 使用一个缓存存储i18n.t对应翻译结果，例如 查找后的字符串，字符串插值，复数形式
+
+* I18n::Backend::Cascade： Cascades查找，通过移除查找key的嵌套作用域，换句话说，如果foo.bar.baz没有找到，就自动查找foo.bar
+
+* I18n::Backend::Fallbacks : 提供了区域回退功能, 如果一个翻译在当前语言环境没有找到，就会退到默认区域的翻译
+
+* I18n::Backend::Gettext : gettex和.po文件支持
+
+* I18n::Backend::InterpolationCompiler : 编译插值key，例如 %{model} 为对应数据，提高执行速度
+
+* I18n::Backend::Memoize : 存储查找结果， 与I18n::Back-end::Cache区别是，如果你使用key-value后端，它使用内存hash存储，并且非常有用
+
+* I18n::Backend::Metadata :添加元数据翻译结果，例如 复数化和字符串插值。 
+
+* I18n::Backend::Pluralization :添加支持复数规则
+
+* I18n::Backend::Transliterator : 添加音译规则
+
+> i18n库提供了几个后端，扩展了不同地方，例如提高性能，添加对特殊语言的支持，例如自定义复数规则
+> 在这张，我们将使用他们中的两个，18n::Backend::KeyValue 和 I18n::Backend::Memoize
+
+>用于i8n的key-value后端可以接收任何对象存储,只要兼容下面api
+
+* @store[]: 根据给定key返回对应值
+* @store[]= 根据给定的可以设置对应值
+* @store.keys: 返回所有存储的keys
+
+> 因为要提供的兼容api很平常，几乎虽有的key-value存储系统都可以作为后端， 在这章，我们使用redis，因为它好用,使用广泛
+
+> 安装redis之后，然后启动服务，我们通过使用redis gem来整合它到我们的app里,redis gem是一个纯ruby写的用于redis的客户端库，在我们gemfile里添加它
+
+    translator/Gemfile
+    gem 'redis', '~> 3.0.3'
+
+> 然后安装这个gem
+
+    bundle install
+
+> 使用rails console命令打开rails控制台，检查redis的api和i8n提供的一致
+
+    db = Redis.new
+    db["foo"] = "bar"
+    db["foo"] # => bar
+    db.keys
+    # => ["foo"]
+
+> 回到我们i18b设置，我们创建一个文件叫做lib/translator.rb，负责设置一个redis实例指向一个适当的数据库(在redis中，数据库作为一个整数被引用)，让我们创建一个自定义的key-valu后端，引入I18n::Backend::Memoize陌路爱，缓存找到的数据，使用redis store初始化
+
+    translator/1_app/lib/translator.rb
+    module Translator
+      DATABASES = {
+        "development" => 0,
+        "test" => 1,
+        "production" => 2
+      }
+      def self.store
+        @store ||= Redis.new(db: DATABASES[Rails.env.to_s])
+      end
+      class Backend < I18n::Backend::KeyValue
+        include I18n::Backend::Memoize
+        def initialize
+          super(Translator.store)
+        end
+      end
+    end
+
+> 让我们在Translator::Application中配置i18n框架使用我们新的后端
+
+    translator/config/application.rb
+    module Translator
+    class Application < Rails::Application
+      # Set translator backend for I18n
+      require "translator"
+      config.i18n.backend = Translator::Backend.new
+
+> 与默认的i18n后端对比，key-valu后端不需要在，每个请求之前从yaml文件加载翻译，而是即时，就是说存储所有默认翻译在我们的redis数据库里， 我们仅仅需要执行下面命令。
+
+    rails runner "I18n.backend.load_translations"
+
+> 当我们打开rails控制台，我们可以访问所有存储在redis数据库里的翻译
+
+    db = Translator.store
+    db.keys
+    db["en.errors.messages.blank"] # => "can't be blank"
+    db["en.number.precision"] # => "{\"format\":{\"delimiter\":\"\"}}"
+
+> 注意key-valu数据库会自动转义值为json
