@@ -438,3 +438,183 @@
 > 可以自由的重启服务器，转换所有数据从一种语言到另一种，注意，我们选择json形式表现数据，因为我们可以简单的表达数组，字符串，数字，和布尔。
 
 > 此时，我们的测试都通过了，我们的翻译 app基本准备好了， 是时候使用devise添加验证,使用capybara让我们的测试更健壮
+
+#### 8.4 Taking It to the Next Level with Devise and Capybara
+
+> 如果我们任何程序为翻译提供接口，我们应该确保这个接口被密码保护,同时适当测试它的功能，在这节，我们学习使用devise
+> 基于rack的全栈式验证框架，深入学习使用capybarar测试rack app
+
+
+###### Adding Cross-Application Authentication
+
+> Devise是一个有趣的解决验证的方案，因为它提供短短几行代码，实现完整的验证，例如登录，注册 密码恢复等等。它使用warden将验证处理移动到到中间件栈。允许任何app,不管是sinatra还是rails controller 使用一样的验证规则
+
+> 添加devise到我们的翻译app，我们首先需要添加它到我们的Gemfile里，并且运行bundle install 安装它
+
+    translator/Gemfile
+    gem 'devise', '~> 3.0.0'
+
+> gem安装后，我们需要调用devise:install生成器
+
+    $ rails g devise:install
+
+> 生成器拷贝一个local文件和有几个配置选项的初始化器到我们的app，最后它打印出需要我们手动操作的步骤
+
+> 首先，配置用于开发环境的Action Mailer
+
+    translator/config/environments/development.rb
+    config.action_mailer.default_url_options = { host: 'localhost:3000' }
+
+> 添加flash message到布局文件
+
+    translator/app/views/layouts/application.html.erb
+    <p class="notice"><%= notice %></p>
+    <p class="alert"><%= alert %></p>
+
+> 添加根路由
+
+    translator/config/routes.rb
+    root to: "home#index"
+
+> 因为我们的根路由指向HomeController,让我们实现这个控制器，现在 index action仅仅是指向被挂在的Sinatra app:
+
+    translator/2_final/app/controllers/home_controller.rb
+    class HomeController < ApplicationController
+      def index
+        render inline:
+          "<%= link_to 'Translate from English to Polish', '/translator/en/pl' %>"
+      end
+    end
+
+> 设置后，我们创建第一个Devise模型，叫做Admin
+
+    $ rails g devise Admin
+
+> 然后运行迁移文件:
+
+  $ bundle exec rake db:migrate
+
+> 此时，我们没有对我们的app做任何重要改变，但是我们运行测试，将会失败，因为用于admin的fixtures没有被适当的填写
+> 然而我们现在不需要fixtures，让我们删除这个fixtures文件确保测试通过，位置是test/fixtures/admins.yml
+
+> 想知道devise是如何工作的，可以随便启动一个新的服务器，访问/admins/sign_up，创建一个新的admin账户，然后登录，如果你想修改你的账户，可以访问/admins/edit。
+
+> devise提供了几个帮助方法，可以约束访问控制器，因为我们创建了一个model叫做admin， 我们可以使用authenticate_admin()作为一个过滤器，请求只会在admin 模型被验证后才会被处理
+
+    class PostsController < ApplicationController
+      before_filter :authenticate_admin!
+    end
+
+> 然而，我们想添加验证到我们的Sinatra app，这里没有引入任何帮助方法，幸运的是，因为warden,这仍然可以使用devise轻松达到，无论何时我们在rails控制器中调用authenticate_admin!()，他都执行下面代码
+
+    env["warden"].authenticate!(scope: "admin")
+
+
+> env["warden"] 对象是　warden 中间件创建的代理，　并且 devise通过rails::Engine添加这个中间件到rails中间件栈,因为这个中间件在请求到达路由之前被执行，这个代理对象可以用在sinatra中，　我们可以简单的添加验证到translator:app的一个before callback中
+
+    translator/lib/translator/app.rb
+    before do
+      env["warden"].authenticate!(scope: "admin")
+    end
+
+> 总的来看　，我们的请求穿过我们的app和中间件栈如下图所示
+
+![](23.png)
+
+> 现在，当你请求sinatra app,而没有以admin身份登录，过滤器将抛出一个错误，warden中间件使用ruby的throw/catch捕捉到这个错误，允许warden重定向到devise的登录页面，一旦你登陆了， 前面代码会简单返回当前session中的admin，然后使用sinatra处理请求
+
+
+>虽然这个方案允许我们使用一样的验证规则在不同的rack app中， 但是有一个问题，他需要我们修改sinatra app添加一个before filter，那就是说，如果我们使用一个第三方的sinatra app,像resque gem，我们就不能修改它
+
+> 在这种情况，我们确保验证在路由那层，不需要修改sinatra app,如下
+
+  authenticate "admin" do
+    mount Translator::App, at: "/translator"
+  end
+
+> devise 添加前面使用的authenticate()方法到rails的路由中，使用router的api确保admin 角色被验证通过
+>让我们检查一下devise中这个方法的源码实现
+
+    def authenticate(scope)
+      constraint = lambda do |request|
+        request.env["warden"    					].authenticate!(:scope => scope)
+      end
+        constraints(constraint) do
+        yield
+      end
+    end
+
+> 不管我们选择before filter还是一个router约束，在我们的Sinatra app里都需要进行验证。 我们可以通过再次运行测试检查翻译后端现在是否安全，看到测试失败
+
+    1) Error:
+    test_can_translate_messages_from_a_given_locale_to_another(TranslatorAppTest)
+    Capybara::ElementNotFound: Unable to find field "date.formats.default"
+
+> 测试不能找到"date.formats.default"标志填充，因为显示/admin/sign_in页面替代了翻译页面，修正这个，让我们在集成测试中验证admin时使用一个steup hook
+
+      translator/test/integration/translator_app_test.rb
+      setup { sign_in(admin) }
+
+        def admin
+          @admin ||= Admin.create!(
+             email: "admin_#{Admin.count}@example.org",
+             password: "12345678"
+          )
+        end
+
+        def sign_in(admin)
+          visit "/admins/sign_in"
+          fill_in "Email",
+          with: admin.email
+          fill_in "Password", with: admin.password
+          click_button "Sign in"
+        end
+
+> 键入这些代码，让我恩再次运行测试，看到他通过了。注意，我们使用手动填写表单注册了一个admin，替代了直接修改session和cookie，事实上即使我们想修改cookie和session， capybara也不会允许我们这么做，原因看下节
+
+
+#### Adding Cross-Browser Testing
+
+> 每次我们使用Capybara时，我们创建自己的测试用例叫做ActiveSupport::IntegrationCase替代ActionController::IntegrationTest
+
+    # Define a bare test case to use with Capybara
+      class ActiveSupport::IntegrationCase < ActiveSupport::TestCase
+        include Capybara
+        include Rails.application.routes.url_helpers
+      end
+
+> 当我们使用ActionController::IntegrationTest编写rails集成测试，我们可以完整的访问request和response对象，允许我们检查和操纵cookies，sessions,headers,等等，capybara 另一种手段，有一个非常类似的api但是没有暴露这些，也就是说，如果我们简单的在ActionController::IntegrationTest引入capybara，我们将被引诱修改这些对象，导致概念和实践的问题
+
+> 让我们套路弄一下概念上的问题，capybara是被用来设计让我们编写集成测试从用户角度，例如假设我们构建了一个电子商务网站，记住用户最终浏览的五个产品，如果我们简单的在session中存储这些产品Id,然后一个简单的集成测试简单的断言，之后，访问一个页面，产品id被添加到session中
+
+> 这种测试的问题是电子商务网站用户不会担心那些东西存储在session中，用户仅仅想看到最后访问产品列表，然后能够点击它们，而不是我们在测试中断言。
+
+>事实上，我们存储这些信息在session中是一个实现细节，如果一些情况，我们决定保存这些数据到cookie，我们天真的测试就会失败，但是因为我们的用户接口没有改变，这些测试应该通过，这是测试中常见的问题，过于耦合实现
+
+>基于这个原因，capybara对你隐藏了这些内部东西，考虑到capybara的最重要特性就是它支持不同的驱动方式，capybara操作浏览器访问我们的app服务器，如下图
+
+![](24.png)
+
+>一些驱动工具，例如selenium，使用常见的浏览器(firefox,internet explorer 和chrome)，与没有界面的浏览器交互像phantomjs
+
+> 正如你预料的，每个浏览器模拟器都必须暴露一些api，或许暴露访问cookies的,其他的或许不暴露，一些无界面浏览器或许让你完整控制请求头，但是其他没有，为了能让你交换驱动和浏览器，不需要重写你的测试，capybara集中了他们大多数支持的功能
+
+> 默认情况，capybara使用rack 测试驱动，通过传递整个浏览器，直接访问rack app，性能上来说非常方便，但是收到限制，例如，任何依赖js的特性，不能使用默认驱动测试， 幸运的是，我们可以简单的修改我们的app使用其他驱动，让我们添加下面代码在我们的test helper中试试selenium
+
+    translator/2_final/test/test_helper.rb
+    require "selenium-webdriver"
+
+    # Can be :chrome, :firefox or :ie
+    Selenium::WebDriver.for :firefox
+    Capybara.default_driver = :selenium
+
+    class ActiveSupport::TestCase
+     # Disable transactional fixtures for integration testing
+      self.use_transactional_fixtures = false
+    end
+
+> Selenium使用真正的浏览器测试我们的app，默认，它使用火狐，你需要在运行测试之前安装它，安装后运行我们的集成测试，注意selenium会自动启动火狐，驱动他访问我们的网站，最后我们的测试通过了。
+
+> 因为Selenium需要一个web服务器来发送每个请求，Capybara自动启动一个，因为capybara会启动一个新的web服务器在一个新的线程里，测试中使用的数据库链接和服务器在每个请求中使用的不是同一个，就是说，如果我们使用transactional fixtures去包装每个测试为一个数据库事务，测试中创建的数据在服务器中不是有效的，因为实物数据不会在数据库连接中分享，直到它被提交，这也是为什么我们需要在test/test_helper.rb里关闭transactional fixtures，因为它会降低性能
+
+> 另一个关闭transactional fixtures的结果是数据被存储在数据库上，测试期间不会被清楚，这肯定会妨碍我们为我们的套件添加新的测试。幸运的是还有其他解决方案，可以使用Database Cleaner，它支持不同的orm框架和数据库
