@@ -42,5 +42,4 @@ eg:
 
       $scope.watch('data',function(){},true)
 
-   
-
+> $provider.factory可以返回任何类型，service只能返回js对象
