@@ -1,6 +1,7 @@
 ## Summary
 
   * [c++文档](cpp/README.md)
+  * [clojure文档](clojure/README.md)
   * [android](android/README.md)
   * [gradle文档](gradle/README.md)
   * [Rake文档](rake/README.md)
