@@ -24,3 +24,4 @@
   * [博客文章备份](blog/README.md)
   * [erlang笔记](erlang/README.md)
   * [elixir笔记](elixir/README.md)
+  * [rabbitmq笔记](rabbitmq/README.md)
