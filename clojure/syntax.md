@@ -28,3 +28,15 @@
 
   (set! (. java.lang.Math PI) 3): 分配3给java.lang.Math类的静态属性PI
   (set! (.foo bar) 3) : 分配3给实例foo的属性bar
+
+
+> 返回一个存储函数的向量
+
+(loop [x 2 y []]
+  (if (< x 5)
+    (recur 
+      (inc x)
+      (conj y (fn [] (print x))))
+      y
+  )
+ )
