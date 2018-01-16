@@ -157,3 +157,67 @@
       prop:{
           key:type //'msg':String
       }
+
+## vue2.0 改变
+
+> 定义组件简洁方式
+
+    //全局
+     var Home = {
+        data(){},
+        methods:{}
+        template:{}
+     }
+
+     Vue.component("name",Home)
+
+     //局部
+
+       new Vue({
+         el:"",
+         data:{
+
+         },
+         component:{
+           "aaa":Home
+         }
+       })
+
+> 生命周期的改变
+
+    * beforeCreate 组件实例刚刚被创建，属性没有
+    * created 实例已经创建完成，属性已经绑定
+    * beforeMount 末班编译之前
+    * mounted　模板编译完成，　ready 时机 变成 mounted
+    * beforeUpdate　 组件数据更新之前
+    * updated　组件数据更新之后
+    * beforeDestroy　组件销毁之前
+    * destroyed 组件销毁之后
+
+> 默认 for 循环可以添加重复数据
+
+    ｖ-for ="x in list"
+     v-for ="(val, index) in list" :key=index
+
+     track-by=id 变成 ：key=index
+
+> 按键定义时间
+
+    Vue.config.keyCodes.ctrl=17
+
+> 过滤器，全部删除
+
+> 自定义过滤器
+
+     Vue.filter('tuDou',function(input){
+       ...
+     })
+
+     但是，
+
+     1.0: {{ msg | toDou '1','2'}}
+     2.0: {{ msg | toDou('1','2') }}
+
+     Vue.filter('tuDou',function(msg,a,b){
+       ...
+     })
