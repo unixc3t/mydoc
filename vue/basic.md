@@ -210,7 +210,7 @@
 > 自定义过滤器
 
      Vue.filter('tuDou',function(input){
-       ...
+       ... 
      })
 
      但是，
@@ -221,3 +221,37 @@
      Vue.filter('tuDou',function(msg,a,b){
        ...
      })
+
+> 单一事件管组件通信 可使用 vuex
+
+      var Event = new Vue();
+      Event.$emit(事件名,数据)
+      Event.$on(事件名,function(data){
+            //data
+      }).bind(this)
+
+
+**** 自定义组件
+
+>自定义组件包括三部分，组件目录，包含install函数的index.js文件和组件文件.vue文件
+
+    loading
+           index.js  //导出组件并且install
+           Loading.vue
+
+
+     index.js文件
+
+     import LoadingComponent from './Loading.vue'
+
+     const Loading ={
+       install:function(Vue){
+         Vue.component('Loading',LoadingComponent)
+       }
+     }
+
+     export default Loading
+
+
+     在需要使用的地方
+     import Loading from './components/loading' 这里默认寻找index.js，如果不是就直接写上那个包含install的文件
