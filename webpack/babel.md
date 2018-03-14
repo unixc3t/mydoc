@@ -53,7 +53,7 @@
 
     配合最新babel8.0版我们需要安装最新的版本
     npm install @babel/runtime --save
-    npm install @babel/plugin-transform-runtime --save
+    npm install @babel/plugin-transform-runtime --save-dev
     //使用时.babelrc中配置
 
     webpack.config.js
