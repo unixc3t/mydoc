@@ -194,3 +194,116 @@
 
     $ docker stop 7f1d6799491e 
     7f1d6799491e
+
+
+##### 管理容器
+
+
+> 容器停止后，虽然可以再次使用，但是很多时候我们硬盘上很多容器不会再次使用，这样就造成了空间浪费，docker提供了删除这些容器的命令， docker run提供了当容器启动后，然后到达停止状态时，自动清理容器，我们需要添加--rm参数
+
+    	 sudo	docker	run	-i	-t	--rm  ubuntu:16.04	/bin/bash
+
+> 另一个办法是 使用docker ps -a显示所有容器，使用docker rm 删除指定容器
+
+
+    $	sudo	docker	ps	-a
+    CONTAINER	ID									IMAGE									COMMAND							CREATED							
+    STATUS															PORTS			
+    NAMES
+    7473f2568add							ubuntu:16.04		"/bin/bash"		5	seconds	ago	
+    Exited	(0)	3	seconds	ago									
+    jolly_wilson
+    $	sudo	docker	rm	7473f2568add
+    7473f2568add
+    $	
+
+> 可以将 docker rm 和docker ps组合使用
+
+    $	sudo	docker	rm	$(sudo	docker	ps	-aq)	
+
+> $()里面的命令列出所有容器，不管是退出的还是运行的，但是删除的时候会报错，因为不能删除正在运行的容器，除非你使用-f选项强制删除,docker　rm　不能删除正在运行的容器，　我们可以使用　-f 选项过滤出退出状态的容器
+
+    $	sudo	docker	rm	$(sudo	docker	ps	-aq	-f	state=exited)
+
+> 命令太冗长，docker提供了简写命令移除停止的全部容器，这个命令是在　1.13版本引入的
+
+    	 docker	container	prune
+
+       $ docker container prune
+        WARNING! This will remove all stopped containers.
+        Are you sure you want to continue? [y/N] y
+        Deleted Containers:
+        7f1d6799491ef331671b1dc7dcc9434f72d4360821e7c9105a6499446b55552f
+        357ac35c6702e420ea3376a0b811dc2ff82e1125ecfd0e491a83a00c5bb766a3
+        ed44d0e8982c7ee62fadc980332929b63f1d50815cbb9f7b9e1148d38f8257bc
+        435cf5d18ab2deb851eccb0026878f5006240dada68697d805676f4454812fc0
+        94a2e03eb9a34d34178dc577a4e90a290ad23582edc82b9774d89f901a7607f9
+        1b57c6477ac8a8da7f6e85215b5e2f026324ca6bb116f053d8faf84ec5dd6e41
+        869a4b14e59c6689fdbe3ac161dd2bf21a3f9fdbe335a9839a5d7c7cef818438
+
+        Total reclaimed space: 95.96MB
+
+##### 从容器构建镜像
+
+> 我们使用　ubuntu:16.04　作为我们基本镜像　安装webget程序，然后将容器转换成镜像
+
+> 1　启动容器
+
+      		$	sudo	docker	run	-i	-t	ubuntu:16.04	/bin/bash
+
+> 2　我们使用　which　 wget命令验证　容器里是否安装了这个wget程序，如果什么都没有返回表示没有安装
+
+    root@472c96295678:/#	which	wget
+		root@472c96295678:/#
+
+> 3　因为我们是基于一个新的ubuntu镜像的容器，我们需要与ubuntu仓库同步，　所以我们使用apt-get update
+> 我们本身就是root身份，这里就不需要sudo了
+
+  	root@472c96295678:/#	apt-get	update
+
+> 4　同步完后，我们安装wget
+
+  		root@472c96295678:/#	apt-get	install	-y	wget
+
+> 5 我们安装后，使用which wget确认一下
+
+    		root@472c96295678:/#	which	wget
+				/usr/bin/wget
+
+> 6 任何软件的安装都会修改镜像的基本组成，我们可以使用docker diff命令跟踪查看，我们打开第二个终端，使用 docker diff
+ 
+    $	sudo	docker	diff	472c96295678
+
+>   上面的命令会显示对于这个镜像的几百行的修改，这些修改包括仓库更新，wget二进制数据，和一些库文件
+
+> 7 最后，我们最重要的一个步骤，docker commit 可以在一个正在运行的容器上，或者停止的容器上执行，
+> 如果在一个运行的容器上运行， docker会 pause这个容器 避免数据不一致， 我们推荐在一个停止的容器上运行这个命令
+> 我们使用下面命令将一个容器变成一个镜像
+
+    			$	sudo	docker	commit	472c96295678	\
+										learningdocker/ubuntu_wget
+						sha256:a530f0a0238654fa741813fac39bba2cc14457aee079a7ae1f	
+						e1c64dc7e1ac25		
+
+> 我们的镜像使用 learningdocker/ubuntu_wget来命名
+
+
+> 使用 docker images来查看我们的镜像
+
+##### 以后台方式启动容器
+
+> docker run 命令支持　-d选项，后台形式启动容器，我们使用前面的打印时间脚本，
+
+    $	sudo	docker	run	-d	ubuntu	\
+				/bin/bash	-c	"while	true;	do	date;	sleep	5;	done"
+      0137d98ee363b44f22a48246ac5d460c65b67e4d7955aab6cbb0379ac421269b
+
+
+> docker logs 可以查看输出
+
+    $	sudo	docker	logs	\
+    0137d98ee363b44f22a48246ac5d460c65b67e4d7955aab6cbb0379ac421269b
+    Sat	Oct		4	17:41:04	UTC	2016
+    Sat	Oct		4	17:41:09	UTC	2016
+    Sat	Oct		4	17:41:14	UTC	2016
+    Sat	Oct		4	17:41:19	UTC	2016
