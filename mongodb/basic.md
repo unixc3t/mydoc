@@ -30,7 +30,9 @@
 > 常用命令
 
    use database 选择数据库
+
    show dbs 查看当前数据库
+
    show tables/collections 查看数据库的表 mongodb中的表叫做collection
 
 > mongodb中可以隐世创建数据库，当你use一个不存在的库，然后在这个库下创建collection就可以创建这个库
@@ -49,11 +51,11 @@
 
 > 删除一个collection
 
-  db.user.drop()
+    db.user.drop()
 
 > 删除一个数据库 database
 
-  db.dropDatabase //db指代use database时的database
+    db.dropDatabase //db指代use database时的database
 
 > mongodb存储的基本单元是文档，也就是document，文档是json对象
 
@@ -70,22 +72,23 @@
 
 > 只删除一行传递参数true
 
-  db.stu.remove({name:'ja'},true)
+    db.stu.remove({name:'ja'},true)
 
 > 整体替换更新 改谁？ 改成什么样？ 选项 ,新文档整体修改了旧文档
 
-  db.st.update({name:'dalang'},{name:'wdalang'})
+    db.st.update({name:'dalang'},{name:'wdalang'})
 
 > 更新某个属性而不是整体,只修改一行
 
-  db.st.update({name:'dalang'},{$set:{name:'wdalang'}})
+    db.st.update({name:'dalang'},{$set:{name:'wdalang'}})
 
 * $set 改某个列
 * $unset 删除某个列
 * $rename 重命名个了列
 * $inc 自动增长某个列
 
-  db.stu.update({name:'dalang'},{$set:{name:'wudalan'},$unset:{age:1},$rename:{old,new},$inc:{age:12}})
+
+    db.stu.update({name:'dalang'},{$set:{name:'wudalan'},$unset:{age:1},$rename:{old,new},$inc:{age:12}})
 
 > 添加multi:true 修改多行
 
@@ -156,11 +159,11 @@
 
 > 找出年龄属性是字符串的数据
 
-  db.goods.find({age:{$type:2}})
+    db.goods.find({age:{$type:2}})
 
 > 找出属性值都包含b,c的数据
 
-  db.goods.find({bobby:{$all:[b,c]}})
+    db.goods.find({bobby:{$all:[b,c]}})
 
 > 使用$where条件,遍历每个document对象，取出属性来比较，效率低,但可读性好，方便写
 
@@ -168,9 +171,9 @@
 
 > 取出价格大于100并且小于300，或大于4000小于5000
 
-  db.goods.find({$or:[{$and:[{price:{$gt:100}},{price:{$lt:300}}]},{$and:[{price:{$gt:4000}},{price:{$lt:5000}}]}]})
+    db.goods.find({$or:[{$and:[{price:{$gt:100}},{price:{$lt:300}}]},{$and:[{price:{$gt:4000}},{price:{$lt:5000}}]}]})
 
-  db.goods.find({$where:'this.price>200 && this.price<300 or this.price > 3000 && this.price< 5000'})
+    db.goods.find({$where:'this.price>200 && this.price<300 or this.price > 3000 && this.price< 5000'})
 
 > 正则匹配
 

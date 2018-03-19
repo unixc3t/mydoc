@@ -26,6 +26,31 @@
 
 ##### 解决打包后文件可以被随意修改
 
-    “package”： “asar pack youtube-linux-x64/resources/app youtube-linux-x64/resources/app.asar”
+    //这里youtube-linux-x64是build后的目录
+    “package”： “asar pack hello-linux-x64/resources/app youtube-linux-x64/resources/app.asar”
 
+    npm run build
     npm run package
+    然后删除 resources/app 目录
+
+  package.json
+
+  {
+    "name": "electronlearn",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+      "start": "electron ./index.js",
+      "package": "asar pack hello-linux-x64/resources/app hello-linux-x64/resources/app.asar",
+      "build": "electron-packager . hello && cp ball.png hello-linux-x64/ball.png"
+
+    },
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+      "asar": "^0.14.3",
+      "electron": "^1.8.4",
+      "electron-packager": "^11.1.0"
+    }
+  }
