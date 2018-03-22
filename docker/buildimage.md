@@ -95,7 +95,7 @@
 
 
 
-#####The	FROM	instruction
+#####FROM命令
 
 > 语法
 
@@ -115,4 +115,82 @@
 
    FROM	ubuntu@sha256:8e2324f2288c26e1393b63e680ee7844202391414dbd48497e9a4fd997cd3cbf	
 
-> docker允许在一个dockerfile中使用多个from命令，来构建多个image，docker会拉出所有from命令指定的image
+> docker允许在一个dockerfile中使用多个from命令，来构建多个image，docker会拉出所有from命令指定的image,
+> docker没有提供命名每个镜像的方法，强烈不推荐在一个dockerfile中使用多个from
+
+##### MAINTAINER 命令
+
+> MAINTAINER是一个提供信息的命令, 这个命令用来设置镜像作者，docker没有限制在文件什么地方使用这个命令,
+> 强烈推荐在FROM指令后面使用这个命令
+
+> <author's deatils>可以替换成任何文本,
+> 强烈推荐使用镜像作者和作者邮箱来作为描述信息
+
+    MAINTAINER	<author's	detail>	
+
+> 下面是一个例子
+
+    MAINTAINER	Dr.	Peter	<peterindia@gmail.com>	
+
+
+##### COPY命令
+
+> copy可以让你从docker宿主机复制文件到镜像的文件系统里，语法如下
+
+    COPY	<src>	...	<dst>	
+
+* src: 可以使当前构建文件的上下文，或者指定其他目录
+* ...: 多个源文件，也可以使用通配符
+* dst: 被构建镜像的目标路径， 源文件被拷贝的地方，如果多个文件被拷贝，这个路径必须是文件目录，目录以/结尾
+
+> 被拷贝的地址使用绝对路径，如果不是绝对路径，copy命令假设目录是从root开始,copy指令可以创建一个新目录，或者在创建镜像时复写文件系统
+
+> 下面例子，从构建文件上下文中拷贝html目录，到镜像/var/www/html
+
+    COPY	html	/var/www/html
+
+> 下面例子是，两个文件 chttpd.conf 和 magic，拷贝到镜像的/etc/httpd/conf/目录
+
+    COPY	httpd.conf	magic	/etc/httpd/conf/	
+
+> ADD 命令
+
+> add命令类似copy命令，除了提供copy指令的功能以外，还可以处理tar文件也远程url，可以理解成add是copy的类固醇
+> 下面是语法
+
+    ADD	<src>	...	<dst>	
+
+> add命令参数非常类似于copy命令
+
+* src: 构建文件上下文或者指定的目录里的文件或者目录，不同的是，这个文件可以是构建上下文中的tar或者远程tar文件
+
+* ...: 多个源文件，也可以使用通配符
+
+* dst:文件或者目录被拷贝到镜像的路径
+
+> 下面例子，拷贝多个源文件到不同的目标目录， 我们在构建上下文中有一个tar文件，包含http配置文件和页面，下面是结构
+
+    $	tar	tf	web-page-config.tar
+    etc/httpd/conf/httpd.conf
+    var/www/html/index.html
+    var/www/html/aboutus.html
+    var/www/html/images/welcome.gif
+    var/www/html/images/banner.gif		
+
+> 下面的命令，是dockerfile文件中的，用来备考tar文件到目标镜像，并且从root目录开始解压 
+
+    ADD	web-page-config.tar	/		
+
+> 所以， add可以拷贝tar文件这个功能，可以拷贝多个文件到镜像
+
+
+##### 	ENV命令
+
+> env指令可以设置新镜像中的环境变量，一个环境变量就是一个键值对， 可以被任何脚本或者程序访问，linux使用环境变量来启动配置
+
+> 下面是语法
+
+    ENV	<key>	<value>	
+
+    ENV	DEBUG_LVL	3	
+    ENV	APACHE_LOG_DIR	/var/log/apache	
