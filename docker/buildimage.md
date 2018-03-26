@@ -194,3 +194,85 @@
 
     ENV	DEBUG_LVL	3	
     ENV	APACHE_LOG_DIR	/var/log/apache	
+
+
+##### ARG命令
+
+> arg命令可以让你定义构建镜像时传递的变量， docker build 子命令支持 --build-arg标记，传递一个值给arg定义的变量，如果你传递的变量没有在dockerfile中定义，就构建失败，换句话说，构建参数必须定义在dockerfile中，如果你想在构建时传递变量值
+
+> 语法如下
+
+    ARG	<variable>[=<default	value>]	
+
+* variable: 构建参数变量
+* default value: 你可以指定默认值
+
+> 如下示例
+
+    ARG	usr	
+    ARG	uid=1000	
+
+> 下面是构建时的例子
+
+    docker	build	--build-arg	usr=app	--build-arg	uid=100	.	
+
+
+##### environment 变量
+
+> 环境变量可以通过env或者arg命令声明， 可以在 	 ADD ,	 COPY ,	 ENV ,	 EXPOSE ,	 LABEL ,	 USER ,	 WORKDIR ,	 VOLUME ,	 STOPSIGNAL ,	and	 ONBUILD 中使用，
+
+> 例子
+
+    ARG	BUILD_VERSION	
+    LABEL	com.example.app.build_version=${BUILD_VERSION}		
+
+
+##### USER 命令
+
+> user命令 设置设置新镜像启动时的用户id或者username， 默认容器使用root作为用户id或者uid
+> 本质上，user命令就是修改默认user id从root到这个命名指定的
+
+    USER	<UID>|<UName>	
+
+> user命令要么接收uid要么是uname作为参数
+
+* uid: 用户数字Id
+* uname: 有效的用户名
+
+>下面例子,设置启动时用户id是73 
+
+    USER	73	
+
+> 虽然建议你在passwd文件中有一个有效的用户id， 但这个user id也可以包含任何随机数字值,然而，
+>username如果指定了，就必须匹配passwd文件中的有效用户名，否则，docker run命令会失败，显示如下错误信息
+
+    finalize	namespace	setup	user	get	supplementary	groups	Unable	to	find	user
+
+
+##### WORKDIR命令
+
+> workdir命令改变当前动作目录，从/变成指定的目录， 后面的指令 run cmd将工作在workdir指定的目录中
+
+> 下面是语法
+
+    WORKDIR	<dirpath>	
+
+> dirpath是被设置的工作目录，这个目录可以是相对目录，或者绝对目录，如果是相对目录，他会相对前面workdir设置的目录，如果指定的目录没有在目标镜像中找到，就会创建这个目录
+
+> 下面例子
+
+    WORKDIR	/var/log	
+
+##### VOLUME命令
+
+> volume命令在目标镜像创建了一个目录，可以被用来挂载来自docker宿主机的volumes或者其他容器
+
+> volume命令有两种语法，第一种exec或者json数组，数组中的值必须使用双引号
+
+    	VOLUME	["<mountpoint>"]	
+
+> 第二种是 shell
+
+      VOLUME	<mountpoint>	
+
+> 	 <mountpoint> 是在新镜像中创建的挂载点
