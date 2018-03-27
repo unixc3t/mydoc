@@ -276,3 +276,83 @@
       VOLUME	<mountpoint>	
 
 > 	 <mountpoint> 是在新镜像中创建的挂载点
+
+
+##### EXPOSE命令
+
+> expose命令开放一个容器的网络端口用于容器和外部世界通讯
+
+>语法如下
+
+    EXPOSE	<port>[/<proto>]	[<port>[/<proto>]...]
+
+* port： 暴露给外部世界的端口
+* proto: 可选项，用于指定协议，例如 tcp,udp, 如果没有传输协议指定，使用tcp
+
+> expose指令允许你指定多个端口，在一行里
+
+> 下面是一个例子，在dockerfile文件中，暴露了7373端口为upd协议，8080端口为tcp协议,
+
+    EXPOSE	7373/udp	8080	
+
+
+##### LABEL命令
+
+> label指令让你添加键值对作为镜像的元数据，可以在以后用来管理镜像
+
+    LABEL	<key-1>=<val-1>	<key-2>=<val-2>	...	<key-n>=<val-n>	
+
+> label可以有一个或多个键值对，虽然一个dockerfile文件可以有多个label指令， 推荐使用一个label指令，后面多个键值对
+
+    LABEL	version="2.0"		
+						release-date="2016-08-05"	
+
+> 上面例子，很简单，但是容易引起命名冲突， 推荐使用域名翻转作为命名空间标记key，
+
+    LABEL	org.label-schema.schema-version="1.0"		
+						org.label-schema.version="2.0"		
+						org.label-schema.description="Learning	Docker	Example"		
+
+
+##### 	RUN命令
+
+> run命令是构建时真正的主力, 可以运行任何命令, 通常推荐一个run命令后面跟着多个命令，这样减少docker镜像的层数，因为在dockerfile中，每调用一次这个命令就创建一层
+
+> run命令有两种语法类型
+
+    run <command>
+
+> command是构建期间可以执行的shell命令，如果这种语法被使用，以/bin/sh -c形式执行
+
+> 第二种语法形式
+
+    	RUN	["<exec>",	"<arg-1>",	...,	"<arg-n>"]	
+
+* exec: 在构建期间执行的命令
+* <arg-1>,	...,	<arg-n>: 这些事可变数量的参数
+
+> 和第一种类型不同，这种类型不会调用 /bin/sh -c ,这种shell处理方式，例如变量替换，通配符替换
+> 都不会发生在这种方式里， 如果shell处理对你来说很重要，鼓励你使用这种，如果你仍然喜欢exec 类型，使用你首选的shell作为可执行文件，并将命令作为参数提供。
+
+    RUN	["bash",	"-c",	"rm",	"-rf",	"/tmp/abc"] .
+
+> 下面是例子， 我们使用run命令，添加欢迎语在目标镜像的.bashrc文件中，
+
+    RUN	echo	"echo	Welcome	to	Docker!"	>>	/root/.bashrc	
+
+> 第二个例子是dockerfile文件，包含了构建一个apache2应用的镜像，
+
+> 1 使用 ubuntu:14.04
+
+    FROM	ubuntu:14.04	
+
+> 2 作者信息
+
+    	MAINTAINER	Dr.	Peter	<peterindia@gmail.com>	
+
+> 3 使用 run命令， 同步仓库，安装apache2 ，清理文件
+
+    	#	Install	apache2	package	
+						RUN	apt-get	update	&&	\	
+									apt-get	install	-y	apache2	&&	\
+									apt-get	clean	
