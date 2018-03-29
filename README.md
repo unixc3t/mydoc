@@ -28,3 +28,4 @@
   * [docker学习笔记](docker/README.md)
   * [vue笔记](vue/README.md)
   * [webpack笔记](webpack/README.md)
+  * [postgresql笔记](postgresql/README.md)
