@@ -242,6 +242,8 @@
         869a4b14e59c6689fdbe3ac161dd2bf21a3f9fdbe335a9839a5d7c7cef818438
 
         Total reclaimed space: 95.96MB
+> 释放系统空间
+    docker system prune -a
 
 ##### 从容器构建镜像
 

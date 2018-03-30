@@ -356,3 +356,91 @@
 						RUN	apt-get	update	&&	\	
 									apt-get	install	-y	apache2	&&	\
 									apt-get	clean	
+          
+##### cmd 指令
+
+> cmd指令可以运行任何命令或者程序，类似run指令，然而这两个最大的不同就是执行时间，这个命令作为run指令的补充，cmd指定的命令是镜像构建后，
+> 容器启动时被执行，因此，cmd指令提供了一个容器的默认执行，然而他可以被docker run指令参数覆盖，当应用程序终止时，容器也将随应用程序终止，反之亦然。
+
+> cmd指令有三种语法，
+
+    		CMD	<command>
+
+> 这里cmd可以使shell命令，在容器启动时执行， 如果这个语法被使用，使用 /bin/sh -c方式执行
+
+        CMD	["<exec>",	"<arg-1>",	...,	"<arg-n>"]	
+
+> exec是可执行的，在容器启动时，<arg-1>,	...,	<arg-n> 用于可执行程序的可变参数数量
+
+        		CMD	["<arg-1>",	...,	"<arg-n>"]	
+
+> 这种语法类似上面，但是，这种类型用来设置默认参数给entrypoint指令
+
+> 理论上你可以在一个dockerfile中写多个cmd指令，但是只有最后一个cmd指令有效
+
+> 下面我们构建一个镜像，cmd提供了一个容器启动后默认执行的程序， 
+
+        ########################################################	
+        #	Dockerfile	to	demonstrate	the	behavior	of	CMD	
+        ########################################################	
+        #	Build	from	base	image	busybox:latest	
+        FROM	busybox:latest	
+        #	Author:	Dr.	Peter	
+        MAINTAINER	Dr.	Peter	<peterindia@gmail.com>	
+        #	Set	command	for	CMD	
+        CMD	["echo",	"Dockerfile	CMD	demo"]
+
+>然后构建
+
+    sudo	docker	build	-t	cmd-demo	.
+
+> 构建后启动容器
+
+   	sudo	docker	run	cmd-demo
+    Dockerfile	CMD	demo		
+
+> 默认执行的程序可以替换， 通过docker run的参数，
+
+  $	sudo	docker	run	cmd-demo	echo	Override	CMD	demo
+    Override	CMD	demo	
+
+
+##### ENTRYPOINT 指令
+
+> ENTRYPOINT指令 用于构建出来的镜像，基于这个镜像，在容器的整个生命周期中运行一个程序，当应用程序终止时，容器也将随应用程序终止，反之亦然
+> entrypoint 将容器变成可执行的，功能上 与cmd类似，但是主要不同是entry point程序使用entrypoint指令启动，不能被docker run指令参数覆盖
+> 但是docker run指令可以传递一个附件参数给entry point程序,docker 提供一个 --entrypoint选项给docker run指令用于覆盖
+
+
+> 语法如下
+
+    	ENTRYPOINT	<command>	
+
+      ENTRYPOINT	["<exec>",	"<arg-1>",	...,	"<arg-n>"]	
+
+> 在dockerfile文件中，只有最后一个entrypoint起作用
+
+> 下面实例
+
+    ########################################################	
+    #	Dockerfile	to	demonstrate	the	behavior	of	ENTRYPOINT	
+    ########################################################	
+    #	Build	from	base	image	busybox:latest	
+    FROM	busybox:latest	
+    #	Author:	Dr.	Peter	
+    MAINTAINER	Dr.	Peter	<peterindia@gmail.com>	
+    #	Set	entrypoint	command	
+    ENTRYPOINT	["echo",	"Dockerfile	ENTRYPOINT	demo"]	
+
+    $sudo	docker	build	-t	entrypoint-demo	.
+
+    $	sudo	docker	run	entrypoint-demo
+    Dockerfile	ENTRYPOINT	demo		
+
+    $	sudo	docker	run	entrypoint-demo	with	additional	arguments
+    Dockerfile	ENTRYPOINT	demo	with	additional	arguments	
+
+> 使用--entrypoint替换
+
+    $	sudo	docker	run	-it	--entrypoint="/bin/sh"	entrypoint-demo
+    /	#		
