@@ -444,3 +444,64 @@
 
     $	sudo	docker	run	-it	--entrypoint="/bin/sh"	entrypoint-demo
     /	#		
+
+#####  HEALTHCHECK指令
+
+> docker容器最佳实践是作为一个进程/程序/服务来运行，以适应快速迭代的微服务架构，容器和运行在它里面的进程绑定在一起，当运行在容器里面的程序停止或者崩溃，容器也会进入停止状态,healthcheck指令通过运行一个监视命令或者工具在指定的时间间隔时监控程序健康状态
+
+> 下面是这个指令语法
+
+    HEALTHCHECK	[<options>]	CMD	<command>
+
+* command:HEALTHCHECK命令在指定时间间隔执行，如果command exit状态是0 ，则容器被认为是健康状态，如果命令退出状态是1，容器被认为是不健康的
+
+* options: 默认 ， healthcheck命令每30秒执行一次，命令超时30秒，并且命令在容器被认为不健康之前尝试3次执行，你可以修改默认间隔时间和重试次数使用下面的选项
+
+    --interval=<DURATION>	[default:	30s]
+    --timeout=<DURATION>	[default:	30s]
+    --retries=<N>	[default:	3]
+
+
+> 下面是一个示例:
+
+    HEALTHCHECK	--interval=5m	--timeout=3s		
+		CMD	curl	-f	http://localhost/	||	exit	1
+
+
+> 如果一个dockerfile文件有多个healtheck指令，仅有最后一个healtheck指令生效，所以你可以覆盖这个指令， 如果你在base镜像中关闭这个健康检查，你可以使用None选项，如下
+
+    HEALTHCHECK	NONE
+
+##### 	ONBUILD	指令
+
+> onbuild指令注册了一个针对一个镜像的构建指令，当另一个镜像基于这个镜像作为基础镜像构建时，得到触发，任何构建指令都可以被注册为触发器，
+> 在from指令执行后触发器指令将会被立刻触发
+
+> onbuild指令可以用来延迟从基本镜像到目标镜像的指令执行
+
+> 语法如下
+
+    ONBUILD	<INSTRUCTION>
+
+> instruction是另一个dockerfile文件的构建指令，经会被稍后触发， onbuild指令，不允许改变另一个Onbuild指令的执行链，此外不允许将from和maintainer指令作为触发器
+
+> 示例
+
+    ONBUILD	ADD	config	/etc/appconfig
+
+##### STOPSIGNAL 指令
+
+> stopsignal指令让你为容器配置一个退出标记，使用下面语法
+
+    STOPSIGNAL	<signal>	
+
+> signal可以是一个有效的信号名称，例如SIGKILL,或者一个无符号数字
+
+
+##### shell 指令
+
+> shell指令允许你覆盖默认的shell，例如， linux上的sh和window上的cmd
+
+> 语法如下
+
+    SHELL	["<shell>",	"<arg-1>",	...,	"<arg-n>"]	
