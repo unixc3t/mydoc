@@ -12,3 +12,13 @@
 > 如果要使用其他编辑器可以把xed换成该程序的具体路径
 
     git config --global core.editor xed
+
+#### pull request 冲突解决
+
+
+> A 被fork的版本库，原作者的版本库   https://github.com/作者/
+>B fork别人的版本库，新增代码希望提交到原作者的版本库中　https://github.com/其他人/
+
+> 1 在A里面自己先创建一个分支 例如test,并且 checkout 这个分支
+> 2 然后　将别人提交上来发生冲突的代码pull下来　，　git pull https://github.com/其他人 master
+> 3　然后　checkout回主分支master， 手动解决冲突
