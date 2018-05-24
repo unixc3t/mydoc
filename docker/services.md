@@ -129,3 +129,82 @@
 > gatewary :  容器网关地址，也是bridge接口地址
 
 > ipaddress: 容器ip地址
+
+####  Publishing a container's	port – the -p option
+
+> 可以使用docker run的 -p选项，在container中绑定对应host的端口，格式如下
+
+    *  <hostPort>:<containerPort>
+    *  <containerPort>
+    *  <ip>:<hostPort>:<containerPort>
+    *  <ip>::<containerPort>
+
+> ip是docker所在主机地址， hostport是所在主机端口, containerPort是容器端口, 目前我们建议,使用
+> hostPort:containerPost,例子如下
+
+    docker run -d -p 80:80 apache2
+
+> 后台模式启动apache2镜像作为容器镜像 
+
+
+#### Binding a container to a specific IP address
+
+> 上面方式绑定了host的全部ip，可以绑定不同的Ip地址，一个服务一个地址
+> 使用ip:hostPort:containerPort
+
+    docker run -d -p 198.51.100.73:80:80 apache2
+
+> ip地址必须是host上有效的ip地址， 如果ip地址无效报如下错误
+
+        Error response from daemon: Cannot start container	
+        Error	starting	user	land	proxy:	listen	tcp	10.110.73.34:49153:	bind:cannot	assign	requeste
+
+
+#### Autogenerating the Docker host port
+
+> 我们使用docker run -p containerPort imagename，让docker host自己生成host对应的端口号
+
+    $ docker run -d -p 80 apache2
+    ccce3686b209c1d18522d5fb272cd3a1a9e12dacf72626083d53d94d1afff0cc
+
+    $ docker ps
+    CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                   NAMES
+    ccce3686b209        apache2             "/usr/sbin/apache2ct…"   4 seconds ago       Up 2 seconds        0.0.0.0:32768->80/tcp   youthful_lewin
+
+>如果你还想指定ip，使用如下
+
+        docker run -d -p 198.51.100.73::80 apache2
+
+#### Port binding using EXPOSE and -P option
+
+> 我们可以使用dockerfile构建镜像，然后在文件中使用expose指令暴露端口，如下
+
+    ###########################################	
+    #	Dockerfile	to	build	an	apache2	image	
+    ###########################################	
+    #	Base	image	is	Ubuntu	
+    FROM	ubuntu:16.04	
+    #	Author:	Dr.	Peter	
+    MAINTAINER	Dr.	Peter	<peterindia@gmail.com>	
+    #	Install	apache2	package	
+    RUN	apt-get	update	&&		
+                        apt-get	install	-y	apache2	&&		
+                        apt-get	clean	
+    #	Set	the	log	directory	PATH	
+    ENV	APACHE_LOG_DIR	/var/log/apache2	
+    #	Expose	port	80	
+    EXPOSE	80	
+    #	Launch	apache2	server	in	the	foreground	
+    ENTRYPOINT	["/usr/sbin/apache2ctl",	"-D",	"FOREGROUND"]	
+
+> 可以使用docker inspect apache2来查看镜像暴露端口
+
+        "ExposedPorts":	{
+			"80/tcp":	{}
+        },
+
+> 但是启动的时候我们必须在 docker run 后面指定-P选项，这样才能打开端口
+
+   docker	run	-d	-P	apache2
+
+   	ea3e0d1b18cf apache2:latest "/usr/sbin/apache2ct5	minutes	ago	Up	5	minutes	0.0.0.0:49159->80/tcp	nostalgic_morse	
