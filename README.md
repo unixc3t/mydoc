@@ -29,4 +29,5 @@
   * [vue笔记](vue/README.md)
   * [webpack笔记](webpack/README.md)
   * [postgresql笔记](postgresql/README.md)
+  * [shell笔记](shell/README.md)
   * [effective_testing_with_rspec3笔记](effective_rspec/README.md)
