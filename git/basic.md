@@ -22,9 +22,11 @@
 
 
 > 1 在A里面自己先创建一个分支 例如test,并且 checkout 这个分支
+
           git checkout -b test master
           
 > 2 然后　将别人提交上来发生冲突的代码pull下来　，　git pull https://github.com/其他人 master(就是别人那个有最新代码的分支名)
+
           git pull https://github.com/unixc3t/prlearn.git tt
           
 > 3　这时在A版本库中, 处在test这个分支上,手动解决冲突代码,然后 git add . , git commit -m
