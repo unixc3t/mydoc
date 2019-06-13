@@ -20,7 +20,7 @@
 
 > 进入容器
 
-    docker exec -it my-postgres bash
+    docker exec -it rails-pg bash
     
 
 > 然后打开新终端登录创建用户，devpg是用户名，密码也是devpg， 不是超级管理员，拥有创建数据库权限，登录权限，继承拥有角色权限
