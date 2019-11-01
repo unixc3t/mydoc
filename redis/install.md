@@ -7,6 +7,8 @@
 > 指定安装目录 
     make PREFIX=/usr/local/redis  install
 
+> docker run --name myredis -p 6379:6379 -v /home/rudy/pro/database/redis/data:/data  -v /home/rudy/pro/database/redis/conf/redis.conf:/etc/redis/redis.conf  --privileged=true  -d redis redis-server
+
 
 #### 安装后文件介绍
 
