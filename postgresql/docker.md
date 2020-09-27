@@ -12,7 +12,9 @@
 
 >下面是启动命令
 
-    docker run --name rails-pg -v /home/rudy/pro/postgresql/data:/var/lib/postgresql/data -p 5432:5432 -dit postgres:latest
+    
+    docker run --name rails-pg -e POSTGRES_PASSWORD=123456 -v /home/rudy/pro/database/postgresql/data:/var/lib/postgresql/data -p 5432:5432 -dit postgres:latest
+
 
 > 查看错误日志使用
 
